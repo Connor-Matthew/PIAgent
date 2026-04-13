@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 
 from backend.database import get_db
 from backend.models.workflow import Workflow
@@ -110,31 +111,33 @@ def delete_workflow(workflow_id: str, db: Session = Depends(get_db)):
 # --- Execution ---
 
 @router.post("/{workflow_id}/run")
-def run_workflow(workflow_id: str, body: RunCreate, db: Session = Depends(get_db)):
-    wf = db.query(Workflow).filter(Workflow.id == workflow_id).first()
+async def run_workflow(workflow_id: str, body: RunCreate, db: Session = Depends(get_db)):
+    wf = await run_in_threadpool(lambda: db.query(Workflow).filter(Workflow.id == workflow_id).first())
     if not wf:
         raise HTTPException(status_code=404, detail="Workflow not found")
 
     run = WorkflowRun(workflow_id=wf.id, input_text=body.input, status="running")
-    db.add(run)
-    db.commit()
-    db.refresh(run)
+    await run_in_threadpool(lambda: db.add(run))
+    await run_in_threadpool(lambda: db.commit())
+    await run_in_threadpool(lambda: db.refresh(run))
 
     engine = ExecutionEngine()
     start = time.time()
     try:
-        result = asyncio.run(engine.run(wf.graph, user_input=body.input))
+        result = await engine.run(wf.graph, user_input=body.input)
     except Exception as exc:
+        duration = round(time.time() - start, 3)
         run.status = "failed"
         run.output = {"error": str(exc)}
-        run.duration = time.time() - start
-        db.commit()
-        raise
+        run.duration = duration
+        await run_in_threadpool(lambda: db.commit())
+        return {"run_id": run.id, "status": "failed", "output": run.output}
 
+    duration = round(time.time() - start, 3)
     run.status = "completed"
     run.output = result
-    run.duration = time.time() - start
-    db.commit()
+    run.duration = duration
+    await run_in_threadpool(lambda: db.commit())
 
     return {"run_id": run.id, "status": "completed", "output": result}
 
@@ -142,12 +145,12 @@ def run_workflow(workflow_id: str, body: RunCreate, db: Session = Depends(get_db
 @router.get("/{workflow_id}/runs/{run_id}/events")
 async def stream_run_events(workflow_id: str, run_id: str, db: Session = Depends(get_db)):
     """SSE endpoint for real-time workflow execution events."""
-    wf = db.query(Workflow).filter(Workflow.id == workflow_id).first()
+    wf = await run_in_threadpool(lambda: db.query(Workflow).filter(Workflow.id == workflow_id).first())
     if not wf:
         raise HTTPException(status_code=404, detail="Workflow not found")
 
-    run = db.query(WorkflowRun).filter(WorkflowRun.id == run_id).first()
-    if not run:
+    run = await run_in_threadpool(lambda: db.query(WorkflowRun).filter(WorkflowRun.id == run_id).first())
+    if not run or run.workflow_id != workflow_id:
         raise HTTPException(status_code=404, detail="Run not found")
 
     async def event_generator():
