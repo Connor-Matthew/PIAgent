@@ -1,11 +1,11 @@
-from typing import TypedDict
+from typing import TypedDict, NotRequired
 from langchain_core.messages import BaseMessage
 
 
 class WorkflowState(TypedDict):
     input: str
-    messages: list[BaseMessage]
-    context: str
-    llm_output: str
-    audio_url: str
-    node_outputs: dict
+    messages: NotRequired[list[BaseMessage]]
+    context: NotRequired[str]
+    llm_output: NotRequired[str]
+    audio_url: NotRequired[str]
+    node_outputs: NotRequired[dict]

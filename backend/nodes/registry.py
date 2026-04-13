@@ -6,6 +6,10 @@ class NodeRegistry:
         self._registry: dict[str, type[BaseNode]] = {}
 
     def register(self, node_cls: type[BaseNode]):
+        if not node_cls.node_type:
+            raise ValueError(f"{node_cls.__name__} must define a non-empty node_type")
+        if node_cls.node_type in self._registry:
+            raise KeyError(f"Node type '{node_cls.node_type}' is already registered")
         self._registry[node_cls.node_type] = node_cls
 
     def get(self, node_type: str) -> type[BaseNode]:
