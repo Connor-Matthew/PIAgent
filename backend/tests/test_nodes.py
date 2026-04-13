@@ -3,6 +3,8 @@ import pytest
 from backend.core.state import WorkflowState
 from backend.nodes.registry import NodeRegistry
 from backend.nodes.base import BaseNode
+from backend.nodes.start_node import StartNode
+from backend.nodes.end_node import EndNode
 
 
 def test_workflow_state_has_required_fields():
@@ -60,7 +62,6 @@ def test_base_node_cannot_be_instantiated_directly():
 
 @pytest.mark.asyncio
 async def test_start_node_writes_input():
-    from backend.nodes.start_node import StartNode
     node = StartNode(config={})
     state: WorkflowState = {
         "input": "", "messages": [], "context": "",
@@ -72,13 +73,48 @@ async def test_start_node_writes_input():
 
 
 @pytest.mark.asyncio
+async def test_start_node_omitted_node_outputs():
+    node = StartNode(config={})
+    state: WorkflowState = {
+        "input": "", "messages": [], "context": "",
+        "llm_output": "", "audio_url": "",
+    }
+    result = await node.execute(state, user_input="hello")
+    assert result["input"] == "hello"
+    assert result["node_outputs"]["start"] == {"input": "hello"}
+
+
+@pytest.mark.asyncio
+async def test_start_node_falls_back_to_state_input():
+    node = StartNode(config={})
+    state: WorkflowState = {
+        "input": "existing input", "messages": [], "context": "",
+        "llm_output": "", "audio_url": "",
+    }
+    result = await node.execute(state)
+    assert result["input"] == "existing input"
+    assert result["node_outputs"]["start"] == {"input": "existing input"}
+
+
+@pytest.mark.asyncio
 async def test_end_node_collects_output():
-    from backend.nodes.end_node import EndNode
     node = EndNode(config={})
     state: WorkflowState = {
         "input": "test", "messages": [], "context": "",
         "llm_output": "generated text", "audio_url": "/audio/test.mp3",
         "node_outputs": {},
+    }
+    result = await node.execute(state)
+    assert result["node_outputs"]["end"]["llm_output"] == "generated text"
+    assert result["node_outputs"]["end"]["audio_url"] == "/audio/test.mp3"
+
+
+@pytest.mark.asyncio
+async def test_end_node_omitted_node_outputs():
+    node = EndNode(config={})
+    state: WorkflowState = {
+        "input": "test", "messages": [], "context": "",
+        "llm_output": "generated text", "audio_url": "/audio/test.mp3",
     }
     result = await node.execute(state)
     assert result["node_outputs"]["end"]["llm_output"] == "generated text"

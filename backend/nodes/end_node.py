@@ -6,6 +6,7 @@ class EndNode(BaseNode):
     node_type = "end"
 
     async def execute(self, state: WorkflowState, **kwargs) -> WorkflowState:
+        state.setdefault("node_outputs", {})
         state["node_outputs"]["end"] = {
             "llm_output": state.get("llm_output", ""),
             "audio_url": state.get("audio_url", ""),

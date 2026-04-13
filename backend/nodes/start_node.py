@@ -8,5 +8,6 @@ class StartNode(BaseNode):
     async def execute(self, state: WorkflowState, **kwargs) -> WorkflowState:
         user_input = kwargs.get("user_input", state.get("input", ""))
         state["input"] = user_input
+        state.setdefault("node_outputs", {})
         state["node_outputs"]["start"] = {"input": user_input}
         return state
