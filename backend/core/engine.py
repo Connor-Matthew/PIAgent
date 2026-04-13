@@ -1,0 +1,81 @@
+import time
+from typing import Callable, Awaitable
+from backend.core.compiler import GraphCompiler
+from backend.core.state import WorkflowState
+
+
+class ExecutionEngine:
+    def __init__(self):
+        self.compiler = GraphCompiler()
+
+    async def run(
+        self,
+        graph_json: dict,
+        user_input: str,
+        on_event: Callable[[dict], Awaitable[None]] | None = None,
+    ) -> WorkflowState:
+        """Execute a workflow graph and emit events for each node."""
+
+        order = self.compiler.topological_sort(graph_json)
+        node_map = {n["id"]: n for n in graph_json["nodes"]}
+
+        # Initialize state
+        state: WorkflowState = {
+            "input": user_input,
+            "messages": [],
+            "context": "",
+            "llm_output": "",
+            "audio_url": "",
+            "node_outputs": {},
+        }
+
+        workflow_start = time.time()
+
+        # Import node registry to get handlers
+        from backend.nodes.registry import node_registry
+
+        for node_id in order:
+            node_def = node_map[node_id]
+            node_cls = node_registry.get(node_def["type"])
+            node_instance = node_cls(config=node_def.get("data", {}))
+
+            # Emit node_start
+            if on_event:
+                await on_event({
+                    "type": "node_start",
+                    "node_id": node_id,
+                    "node_type": node_def["type"],
+                    "status": "running",
+                })
+
+            node_start = time.time()
+
+            # Execute node
+            if node_def["type"] == "start":
+                state = await node_instance.execute(state, user_input=user_input)
+            else:
+                state = await node_instance.execute(state)
+
+            duration = round(time.time() - node_start, 3)
+
+            # Emit node_end
+            if on_event:
+                await on_event({
+                    "type": "node_end",
+                    "node_id": node_id,
+                    "node_type": node_def["type"],
+                    "status": "completed",
+                    "duration": duration,
+                    "output": state.get("node_outputs", {}).get(node_id, {}),
+                })
+
+        total_duration = round(time.time() - workflow_start, 3)
+
+        if on_event:
+            await on_event({
+                "type": "workflow_end",
+                "status": "completed",
+                "duration": total_duration,
+            })
+
+        return state
