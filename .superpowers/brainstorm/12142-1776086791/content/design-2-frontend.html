@@ -1,0 +1,304 @@
+<h2>设计 Part 2：前端 UI 布局</h2>
+<p class="subtitle">三栏布局 + 调试抽屉，参考 Dify / Coze 等主流 Agent 平台</p>
+
+<!-- 主布局 Mockup -->
+<div class="mockup">
+  <div class="mockup-header">主界面布局 — 工作流编排面板</div>
+  <div class="mockup-body" style="padding: 0; height: 420px; display: flex; overflow: hidden;">
+
+    <!-- 左侧节点面板 -->
+    <div style="width: 220px; background: #0f172a; border-right: 1px solid #1e293b; padding: 16px; flex-shrink: 0; overflow-y: auto;">
+      <div style="font-size: 0.75rem; color: #64748b; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px;">节点库</div>
+
+      <div style="font-size: 0.7rem; color: #475569; margin-bottom: 6px;">基础节点</div>
+      <div style="background:#1e293b; border:1px solid #334155; border-radius:8px; padding:10px; margin-bottom:6px; display:flex; align-items:center; gap:8px; cursor:grab;">
+        <span style="background:#3b82f6; width:24px; height:24px; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:0.65rem; color:white;">入</span>
+        <span style="color:#e2e8f0; font-size:0.8rem;">用户输入</span>
+      </div>
+      <div style="background:#1e293b; border:1px solid #334155; border-radius:8px; padding:10px; margin-bottom:6px; display:flex; align-items:center; gap:8px; cursor:grab;">
+        <span style="background:#64748b; width:24px; height:24px; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:0.65rem; color:white;">⏹</span>
+        <span style="color:#e2e8f0; font-size:0.8rem;">结束</span>
+      </div>
+
+      <div style="font-size: 0.7rem; color: #475569; margin-top: 14px; margin-bottom: 6px;">大模型</div>
+      <div style="background:#1e293b; border:1px solid #334155; border-radius:8px; padding:10px; margin-bottom:6px; display:flex; align-items:center; gap:8px; cursor:grab;">
+        <span style="background:#a855f7; width:24px; height:24px; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:0.65rem; color:white;">🧠</span>
+        <span style="color:#e2e8f0; font-size:0.8rem;">LLM 对话</span>
+      </div>
+      <div style="background:#1e293b; border:1px solid #334155; border-radius:8px; padding:10px; margin-bottom:6px; display:flex; align-items:center; gap:8px; cursor:grab;">
+        <span style="background:#ec4899; width:24px; height:24px; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:0.65rem; color:white;">🤖</span>
+        <span style="color:#e2e8f0; font-size:0.8rem;">ReAct Agent</span>
+      </div>
+
+      <div style="font-size: 0.7rem; color: #475569; margin-top: 14px; margin-bottom: 6px;">工具</div>
+      <div style="background:#1e293b; border:1px solid #334155; border-radius:8px; padding:10px; margin-bottom:6px; display:flex; align-items:center; gap:8px; cursor:grab;">
+        <span style="background:#22c55e; width:24px; height:24px; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:0.65rem; color:white;">📚</span>
+        <span style="color:#e2e8f0; font-size:0.8rem;">RAG 知识检索</span>
+      </div>
+      <div style="background:#1e293b; border:1px solid #334155; border-radius:8px; padding:10px; margin-bottom:6px; display:flex; align-items:center; gap:8px; cursor:grab;">
+        <span style="background:#fbbf24; width:24px; height:24px; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:0.65rem; color:white;">🎙</span>
+        <span style="color:#e2e8f0; font-size:0.8rem;">TTS 音频合成</span>
+      </div>
+    </div>
+
+    <!-- 中间画布 -->
+    <div style="flex: 1; background: #0a0f1a; position: relative; overflow: hidden;">
+      <!-- 网格背景 -->
+      <div style="position:absolute; inset:0; background-image: radial-gradient(circle, #1e293b 1px, transparent 1px); background-size: 24px 24px; opacity: 0.5;"></div>
+
+      <!-- 节点和连线 -->
+      <div style="position: relative; z-index: 1; padding: 40px;">
+
+        <!-- 用户输入节点 -->
+        <div style="position:absolute; top:40px; left:60px; background:#1e293b; border:2px solid #3b82f6; border-radius:12px; padding:12px 16px; min-width:160px;">
+          <div style="display:flex; align-items:center; gap:6px; margin-bottom:6px;">
+            <span style="background:#3b82f6; width:20px; height:20px; border-radius:4px; display:flex; align-items:center; justify-content:center; font-size:0.6rem; color:white;">入</span>
+            <span style="color:#e2e8f0; font-size:0.8rem; font-weight:600;">用户输入</span>
+          </div>
+          <div style="font-size:0.7rem; color:#64748b;">请输入播客主题...</div>
+          <!-- 输出锚点 -->
+          <div style="position:absolute; right:-6px; top:50%; width:12px; height:12px; background:#3b82f6; border-radius:50%; border:2px solid #0a0f1a;"></div>
+        </div>
+
+        <!-- 连线1 -->
+        <div style="position:absolute; top:68px; left:236px; width:80px; height:2px; background:linear-gradient(90deg, #3b82f6, #a855f7);"></div>
+
+        <!-- LLM 节点 -->
+        <div style="position:absolute; top:30px; left:316px; background:#1e293b; border:2px solid #a855f7; border-radius:12px; padding:12px 16px; min-width:180px;">
+          <div style="display:flex; align-items:center; gap:6px; margin-bottom:6px;">
+            <span style="background:#a855f7; width:20px; height:20px; border-radius:4px; display:flex; align-items:center; justify-content:center; font-size:0.6rem; color:white;">🧠</span>
+            <span style="color:#e2e8f0; font-size:0.8rem; font-weight:600;">LLM 对话</span>
+          </div>
+          <div style="font-size:0.7rem; color:#94a3b8;">模型: GPT-4o</div>
+          <div style="font-size:0.7rem; color:#94a3b8;">Prompt: 生成播客脚本...</div>
+          <div style="position:absolute; left:-6px; top:50%; width:12px; height:12px; background:#a855f7; border-radius:50%; border:2px solid #0a0f1a;"></div>
+          <div style="position:absolute; right:-6px; top:50%; width:12px; height:12px; background:#a855f7; border-radius:50%; border:2px solid #0a0f1a;"></div>
+        </div>
+
+        <!-- 连线2 -->
+        <div style="position:absolute; top:68px; left:512px; width:60px; height:2px; background:linear-gradient(90deg, #a855f7, #fbbf24);"></div>
+
+        <!-- TTS 节点 -->
+        <div style="position:absolute; top:35px; left:572px; background:#1e293b; border:2px solid #fbbf24; border-radius:12px; padding:12px 16px; min-width:170px;">
+          <div style="display:flex; align-items:center; gap:6px; margin-bottom:6px;">
+            <span style="background:#fbbf24; width:20px; height:20px; border-radius:4px; display:flex; align-items:center; justify-content:center; font-size:0.6rem; color:white;">🎙</span>
+            <span style="color:#e2e8f0; font-size:0.8rem; font-weight:600;">TTS 音频合成</span>
+          </div>
+          <div style="font-size:0.7rem; color:#94a3b8;">服务: Fish Audio</div>
+          <div style="font-size:0.7rem; color:#94a3b8;">音色: 自然女声</div>
+          <div style="position:absolute; left:-6px; top:50%; width:12px; height:12px; background:#fbbf24; border-radius:50%; border:2px solid #0a0f1a;"></div>
+          <div style="position:absolute; right:-6px; top:50%; width:12px; height:12px; background:#fbbf24; border-radius:50%; border:2px solid #0a0f1a;"></div>
+        </div>
+
+        <!-- 连线3 -->
+        <div style="position:absolute; top:68px; left:758px; width:50px; height:2px; background:linear-gradient(90deg, #fbbf24, #64748b);"></div>
+
+        <!-- 结束节点 -->
+        <div style="position:absolute; top:45px; left:808px; background:#1e293b; border:2px solid #64748b; border-radius:12px; padding:12px 16px;">
+          <div style="display:flex; align-items:center; gap:6px;">
+            <span style="background:#64748b; width:20px; height:20px; border-radius:4px; display:flex; align-items:center; justify-content:center; font-size:0.6rem; color:white;">⏹</span>
+            <span style="color:#e2e8f0; font-size:0.8rem; font-weight:600;">结束</span>
+          </div>
+          <div style="position:absolute; left:-6px; top:50%; width:12px; height:12px; background:#64748b; border-radius:50%; border:2px solid #0a0f1a;"></div>
+        </div>
+
+        <!-- 第二行：RAG 示例流程 -->
+        <div style="position:absolute; top:180px; left:60px; color:#475569; font-size:0.7rem;">示例流程 2：RAG + Agent 播客</div>
+
+        <div style="position:absolute; top:210px; left:60px; background:#1e293b; border:1px solid #334155; border-radius:10px; padding:10px 14px; font-size:0.75rem;">
+          <span style="color:#3b82f6;">入</span> <span style="color:#94a3b8;">用户输入</span>
+        </div>
+        <div style="position:absolute; top:232px; left:200px; width:40px; height:2px; background:#334155;"></div>
+        <div style="position:absolute; top:210px; left:240px; background:#1e293b; border:1px solid #334155; border-radius:10px; padding:10px 14px; font-size:0.75rem;">
+          <span style="color:#22c55e;">📚</span> <span style="color:#94a3b8;">RAG 检索</span>
+        </div>
+        <div style="position:absolute; top:232px; left:380px; width:40px; height:2px; background:#334155;"></div>
+        <div style="position:absolute; top:210px; left:420px; background:#1e293b; border:1px solid #334155; border-radius:10px; padding:10px 14px; font-size:0.75rem;">
+          <span style="color:#ec4899;">🤖</span> <span style="color:#94a3b8;">ReAct Agent</span>
+        </div>
+        <div style="position:absolute; top:232px; left:570px; width:40px; height:2px; background:#334155;"></div>
+        <div style="position:absolute; top:210px; left:610px; background:#1e293b; border:1px solid #334155; border-radius:10px; padding:10px 14px; font-size:0.75rem;">
+          <span style="color:#fbbf24;">🎙</span> <span style="color:#94a3b8;">TTS</span>
+        </div>
+        <div style="position:absolute; top:232px; left:700px; width:40px; height:2px; background:#334155;"></div>
+        <div style="position:absolute; top:210px; left:740px; background:#1e293b; border:1px solid #334155; border-radius:10px; padding:10px 14px; font-size:0.75rem;">
+          <span style="color:#64748b;">⏹</span> <span style="color:#94a3b8;">结束</span>
+        </div>
+      </div>
+
+      <!-- 底部工具栏 -->
+      <div style="position:absolute; bottom:12px; left:50%; transform:translateX(-50%); background:#1e293b; border:1px solid #334155; border-radius:10px; padding:8px 16px; display:flex; gap:16px; align-items:center;">
+        <span style="color:#94a3b8; font-size:0.75rem; cursor:pointer;">🔍 100%</span>
+        <span style="color:#334155;">|</span>
+        <span style="color:#94a3b8; font-size:0.75rem; cursor:pointer;">↩ 撤销</span>
+        <span style="color:#94a3b8; font-size:0.75rem; cursor:pointer;">↪ 重做</span>
+        <span style="color:#334155;">|</span>
+        <span style="background:#3b82f6; color:white; font-size:0.75rem; padding:4px 12px; border-radius:6px; cursor:pointer;">▶ 调试</span>
+      </div>
+    </div>
+
+    <!-- 右侧属性面板 -->
+    <div style="width: 260px; background: #0f172a; border-left: 1px solid #1e293b; padding: 16px; flex-shrink: 0;">
+      <div style="font-size: 0.75rem; color: #64748b; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px;">节点配置</div>
+
+      <div style="margin-bottom: 16px;">
+        <div style="display:flex; align-items:center; gap:6px; margin-bottom:12px;">
+          <span style="background:#a855f7; width:20px; height:20px; border-radius:4px; display:flex; align-items:center; justify-content:center; font-size:0.6rem; color:white;">🧠</span>
+          <span style="color:#e2e8f0; font-size:0.85rem; font-weight:600;">LLM 对话</span>
+        </div>
+      </div>
+
+      <div style="margin-bottom: 14px;">
+        <div style="font-size:0.7rem; color:#94a3b8; margin-bottom:4px;">模型提供商</div>
+        <div style="background:#1e293b; border:1px solid #334155; border-radius:6px; padding:8px 10px; color:#e2e8f0; font-size:0.8rem; display:flex; justify-content:space-between; align-items:center;">
+          <span>OpenAI</span> <span style="color:#475569;">▾</span>
+        </div>
+      </div>
+
+      <div style="margin-bottom: 14px;">
+        <div style="font-size:0.7rem; color:#94a3b8; margin-bottom:4px;">模型</div>
+        <div style="background:#1e293b; border:1px solid #334155; border-radius:6px; padding:8px 10px; color:#e2e8f0; font-size:0.8rem; display:flex; justify-content:space-between; align-items:center;">
+          <span>GPT-4o</span> <span style="color:#475569;">▾</span>
+        </div>
+      </div>
+
+      <div style="margin-bottom: 14px;">
+        <div style="font-size:0.7rem; color:#94a3b8; margin-bottom:4px;">Temperature</div>
+        <div style="background:#1e293b; border-radius:6px; height:6px; position:relative; margin-top:8px;">
+          <div style="background:#a855f7; border-radius:6px; height:100%; width:70%;"></div>
+          <div style="position:absolute; right:28%; top:-3px; width:12px; height:12px; background:white; border-radius:50%;"></div>
+        </div>
+        <div style="text-align:right; font-size:0.7rem; color:#94a3b8; margin-top:4px;">0.7</div>
+      </div>
+
+      <div style="margin-bottom: 14px;">
+        <div style="font-size:0.7rem; color:#94a3b8; margin-bottom:4px;">System Prompt</div>
+        <div style="background:#1e293b; border:1px solid #334155; border-radius:6px; padding:8px 10px; color:#94a3b8; font-size:0.75rem; min-height:80px;">
+          你是一个专业的播客脚本作家。根据用户提供的主题，生成一段生动有趣的播客独白脚本...
+        </div>
+      </div>
+
+      <div>
+        <div style="font-size:0.7rem; color:#94a3b8; margin-bottom:4px;">流式输出</div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <div style="width:36px; height:20px; background:#a855f7; border-radius:10px; position:relative;">
+            <div style="width:16px; height:16px; background:white; border-radius:50%; position:absolute; right:2px; top:2px;"></div>
+          </div>
+          <span style="font-size:0.75rem; color:#94a3b8;">开启</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 调试抽屉 -->
+<h2 style="margin-top: 2.5rem;">调试抽屉 (Debug Drawer)</h2>
+<p class="subtitle">底部抽屉上滑展开，支持简洁/详细两种模式</p>
+
+<div class="mockup">
+  <div class="mockup-header">调试面板 — 详细模式</div>
+  <div class="mockup-body" style="padding: 0; min-height: 320px; display: flex; flex-direction: column;">
+
+    <!-- 抽屉头部 -->
+    <div style="background:#1e293b; padding:12px 20px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #334155;">
+      <div style="display:flex; align-items:center; gap:12px;">
+        <span style="color:#e2e8f0; font-size:0.9rem; font-weight:600;">调试运行</span>
+        <div style="display:flex; gap:4px;">
+          <span style="background:#0f172a; color:#94a3b8; font-size:0.7rem; padding:3px 10px; border-radius:4px; cursor:pointer;">简洁</span>
+          <span style="background:#3b82f6; color:white; font-size:0.7rem; padding:3px 10px; border-radius:4px; cursor:pointer;">详细</span>
+        </div>
+      </div>
+      <span style="color:#64748b; cursor:pointer; font-size:1.2rem;">✕</span>
+    </div>
+
+    <div style="display:flex; flex:1;">
+      <!-- 左侧：输入 -->
+      <div style="width:300px; padding:16px; border-right:1px solid #1e293b;">
+        <div style="font-size:0.7rem; color:#94a3b8; margin-bottom:8px;">输入文本</div>
+        <div style="background:#0f172a; border:1px solid #334155; border-radius:8px; padding:12px; min-height:100px; color:#e2e8f0; font-size:0.8rem;">
+          帮我做一期关于"AI 如何改变教育"的播客节目
+        </div>
+        <button style="background:#3b82f6; color:white; border:none; border-radius:8px; padding:8px 20px; font-size:0.8rem; margin-top:12px; cursor:pointer; width:100%;">▶ 开始运行</button>
+      </div>
+
+      <!-- 中间：节点执行链路 -->
+      <div style="flex:1; padding:16px; overflow-y:auto;">
+        <div style="font-size:0.7rem; color:#94a3b8; margin-bottom:12px;">执行链路</div>
+
+        <!-- 节点1: 完成 -->
+        <div style="background:#0f172a; border:1px solid #22c55e40; border-radius:10px; padding:12px; margin-bottom:8px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <div style="display:flex; align-items:center; gap:6px;">
+              <span style="color:#22c55e;">✓</span>
+              <span style="color:#e2e8f0; font-size:0.8rem; font-weight:500;">用户输入</span>
+            </div>
+            <span style="color:#64748b; font-size:0.65rem;">0.01s</span>
+          </div>
+          <div style="font-size:0.7rem; color:#94a3b8; background:#1e293b; border-radius:6px; padding:8px; max-height:40px; overflow:hidden;">
+            输出: "帮我做一期关于'AI 如何改变教育'的播客节目"
+          </div>
+        </div>
+
+        <!-- 节点2: 运行中 -->
+        <div style="background:#0f172a; border:1px solid #a855f740; border-radius:10px; padding:12px; margin-bottom:8px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <div style="display:flex; align-items:center; gap:6px;">
+              <span style="color:#a855f7; animation: spin 1s linear infinite; display:inline-block;">⟳</span>
+              <span style="color:#e2e8f0; font-size:0.8rem; font-weight:500;">LLM 对话</span>
+              <span style="background:#a855f720; color:#a855f7; font-size:0.6rem; padding:2px 6px; border-radius:4px;">streaming</span>
+            </div>
+            <span style="color:#64748b; font-size:0.65rem;">3.2s...</span>
+          </div>
+          <div style="font-size:0.7rem; color:#c4b5fd; background:#1e293b; border-radius:6px; padding:8px; max-height:60px; overflow:hidden;">
+            大家好，欢迎收听本期播客。今天我们要聊一个非常火热的话题——AI 如何改变教育。从个性化学习到智能批改，人工智能正在重塑我们对教育的理解...<span style="animation: blink 1s step-end infinite;">|</span>
+          </div>
+        </div>
+
+        <!-- 节点3: 等待 -->
+        <div style="background:#0f172a; border:1px solid #1e293b; border-radius:10px; padding:12px; margin-bottom:8px; opacity:0.5;">
+          <div style="display:flex; align-items:center; gap:6px;">
+            <span style="color:#64748b;">○</span>
+            <span style="color:#94a3b8; font-size:0.8rem;">TTS 音频合成</span>
+          </div>
+        </div>
+
+        <!-- 节点4: 等待 -->
+        <div style="background:#0f172a; border:1px solid #1e293b; border-radius:10px; padding:12px; opacity:0.5;">
+          <div style="display:flex; align-items:center; gap:6px;">
+            <span style="color:#64748b;">○</span>
+            <span style="color:#94a3b8; font-size:0.8rem;">结束</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 右侧：输出 -->
+      <div style="width:280px; padding:16px; border-left:1px solid #1e293b;">
+        <div style="font-size:0.7rem; color:#94a3b8; margin-bottom:12px;">最终输出</div>
+
+        <!-- 音频播放器 -->
+        <div style="background:#0f172a; border:1px solid #334155; border-radius:12px; padding:16px; opacity:0.4;">
+          <div style="font-size:0.75rem; color:#94a3b8; margin-bottom:10px;">🎧 AI 播客播放器</div>
+          <div style="background:#1e293b; border-radius:8px; height:4px; margin-bottom:10px;">
+            <div style="background:#3b82f6; border-radius:8px; height:100%; width:0%;"></div>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span style="color:#64748b; font-size:0.7rem;">0:00</span>
+            <div style="display:flex; gap:12px; align-items:center;">
+              <span style="color:#64748b; cursor:pointer;">⏮</span>
+              <span style="background:#3b82f6; color:white; width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; cursor:pointer;">▶</span>
+              <span style="color:#64748b; cursor:pointer;">⏭</span>
+            </div>
+            <span style="color:#64748b; font-size:0.7rem;">--:--</span>
+          </div>
+        </div>
+
+        <div style="margin-top:12px; font-size:0.7rem; color:#475569; text-align:center;">等待工作流执行完成...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+@keyframes blink { 50% { opacity: 0; } }
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>

@@ -1,12 +1,14 @@
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     database_url: str = "sqlite:///./piagent.db"
     audio_dir: str = "./audio_files"
-    openai_api_key: str = ""
-    anthropic_api_key: str = ""
-    google_api_key: str = ""
-    deepseek_api_key: str = ""
+    openai_api_key: SecretStr = ""
+    anthropic_api_key: SecretStr = ""
+    google_api_key: SecretStr = ""
+    deepseek_api_key: SecretStr = ""
+    cors_origins: list[str] = ["http://localhost:5173"]
 
     class Config:
         env_file = ".env"

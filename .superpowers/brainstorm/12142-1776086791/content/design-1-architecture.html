@@ -1,0 +1,113 @@
+<h2>设计 Part 1：整体架构 & 节点体系</h2>
+<p class="subtitle">PIAgent — AI Agent 工作流编排平台</p>
+
+<!-- 整体架构图 -->
+<div class="mockup">
+  <div class="mockup-header">系统架构总览</div>
+  <div class="mockup-body" style="padding: 1.5rem;">
+    <div style="font-family: monospace; font-size: 0.82rem; line-height: 2.2; color: #e2e8f0;">
+
+      <div style="text-align:center; margin-bottom: 1rem;">
+        <span style="background:#3b82f6; padding:6px 16px; border-radius:8px; color:white; font-weight:600;">Frontend — React + React Flow + Zustand</span>
+      </div>
+
+      <div style="text-align:center; color:#64748b; margin-bottom:0.5rem;">↕ REST API + SSE</div>
+
+      <div style="text-align:center; margin-bottom: 1rem;">
+        <span style="background:#22c55e; padding:6px 16px; border-radius:8px; color:white; font-weight:600;">Backend — FastAPI + LangGraph + LangChain</span>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-top: 1rem;">
+        <div style="background:rgba(251,191,36,0.1); border:1px solid rgba(251,191,36,0.3); border-radius:8px; padding:12px; text-align:center;">
+          <div style="color:#fbbf24; font-weight:600; margin-bottom:4px;">Graph Compiler</div>
+          <div style="font-size:0.75rem; color:#94a3b8;">画布 JSON → LangGraph<br>StateGraph 编译</div>
+        </div>
+        <div style="background:rgba(168,85,247,0.1); border:1px solid rgba(168,85,247,0.3); border-radius:8px; padding:12px; text-align:center;">
+          <div style="color:#a855f7; font-weight:600; margin-bottom:4px;">Node Registry</div>
+          <div style="font-size:0.75rem; color:#94a3b8;">LLM / RAG / Agent<br>TTS / 自定义节点</div>
+        </div>
+        <div style="background:rgba(236,72,153,0.1); border:1px solid rgba(236,72,153,0.3); border-radius:8px; padding:12px; text-align:center;">
+          <div style="color:#ec4899; font-weight:600; margin-bottom:4px;">Execution Engine</div>
+          <div style="font-size:0.75rem; color:#94a3b8;">LangGraph 运行时<br>状态管理 + SSE 推送</div>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-top: 12px;">
+        <div style="background:rgba(99,102,241,0.1); border:1px solid rgba(99,102,241,0.3); border-radius:8px; padding:12px; text-align:center;">
+          <div style="color:#6366f1; font-weight:600; margin-bottom:4px;">LLM Providers</div>
+          <div style="font-size:0.75rem; color:#94a3b8;">OpenAI / Anthropic<br>Google / DeepSeek</div>
+        </div>
+        <div style="background:rgba(99,102,241,0.1); border:1px solid rgba(99,102,241,0.3); border-radius:8px; padding:12px; text-align:center;">
+          <div style="color:#6366f1; font-weight:600; margin-bottom:4px;">Vector Store</div>
+          <div style="font-size:0.75rem; color:#94a3b8;">Chroma / FAISS<br>Embedding 模型</div>
+        </div>
+        <div style="background:rgba(99,102,241,0.1); border:1px solid rgba(99,102,241,0.3); border-radius:8px; padding:12px; text-align:center;">
+          <div style="color:#6366f1; font-weight:600; margin-bottom:4px;">TTS Service</div>
+          <div style="font-size:0.75rem; color:#94a3b8;">抽象接口<br>可插拔多个 Provider</div>
+        </div>
+      </div>
+
+      <div style="text-align:center; color:#64748b; margin-top:1rem; margin-bottom:0.5rem;">↕ SQLAlchemy ORM</div>
+
+      <div style="text-align:center;">
+        <span style="background:#64748b; padding:6px 16px; border-radius:8px; color:white; font-weight:600;">SQLite（工作流定义 + 执行记录）</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 节点体系 -->
+<h2 style="margin-top: 2.5rem;">节点体系设计</h2>
+<p class="subtitle">5 种核心节点类型，覆盖完整 Agent 工作流</p>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+
+  <div style="background:rgba(59,130,246,0.08); border:1px solid rgba(59,130,246,0.25); border-radius:12px; padding:1.2rem;">
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+      <span style="background:#3b82f6; color:white; width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:0.8rem;">入</span>
+      <h3 style="margin:0; font-size:1rem;">用户输入节点 (Start)</h3>
+    </div>
+    <p style="font-size:0.85rem; color:#94a3b8; margin:0;">工作流入口。接收用户文本输入，写入 LangGraph State，触发图执行。</p>
+  </div>
+
+  <div style="background:rgba(168,85,247,0.08); border:1px solid rgba(168,85,247,0.25); border-radius:12px; padding:1.2rem;">
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+      <span style="background:#a855f7; color:white; width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:0.75rem;">🧠</span>
+      <h3 style="margin:0; font-size:1rem;">大模型节点 (LLM)</h3>
+    </div>
+    <p style="font-size:0.85rem; color:#94a3b8; margin:0;">通过 LangChain ChatModel 调用 LLM。可配置：模型选择、Temperature、System Prompt、流式输出。支持 OpenAI / Anthropic / Google 等。</p>
+  </div>
+
+  <div style="background:rgba(34,197,94,0.08); border:1px solid rgba(34,197,94,0.25); border-radius:12px; padding:1.2rem;">
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+      <span style="background:#22c55e; color:white; width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:0.75rem;">📚</span>
+      <h3 style="margin:0; font-size:1rem;">RAG 知识检索节点</h3>
+    </div>
+    <p style="font-size:0.85rem; color:#94a3b8; margin:0;">完整 RAG 链路：文本 → Embedding → 向量检索 (Chroma) → Reranking → 注入上下文。可配置：知识库选择、Top-K、相似度阈值。</p>
+  </div>
+
+  <div style="background:rgba(251,191,36,0.08); border:1px solid rgba(251,191,36,0.25); border-radius:12px; padding:1.2rem;">
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+      <span style="background:#fbbf24; color:white; width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:0.75rem;">🎙</span>
+      <h3 style="margin:0; font-size:1rem;">TTS 音频合成节点</h3>
+    </div>
+    <p style="font-size:0.85rem; color:#94a3b8; margin:0;">LangChain Tool 封装。接收文本，调用 TTS 服务生成音频。抽象接口设计，支持多 Provider 切换。输出音频 URL。</p>
+  </div>
+
+  <div style="background:rgba(236,72,153,0.08); border:1px solid rgba(236,72,153,0.25); border-radius:12px; padding:1.2rem;">
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+      <span style="background:#ec4899; color:white; width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:0.75rem;">🤖</span>
+      <h3 style="margin:0; font-size:1rem;">Agent 节点 (ReAct)</h3>
+    </div>
+    <p style="font-size:0.85rem; color:#94a3b8; margin:0;">LangGraph ReAct Agent。LLM 自主推理，决定调用哪些 Tool（RAG 检索、TTS 合成等）。面试核心亮点：展示 Agent 自主决策能力。</p>
+  </div>
+
+  <div style="background:rgba(100,116,139,0.08); border:1px solid rgba(100,116,139,0.25); border-radius:12px; padding:1.2rem;">
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+      <span style="background:#64748b; color:white; width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:0.8rem;">⏹</span>
+      <h3 style="margin:0; font-size:1rem;">结束节点 (End)</h3>
+    </div>
+    <p style="font-size:0.85rem; color:#94a3b8; margin:0;">工作流终点。汇总所有节点输出（文本 + 音频），返回最终结果给前端调试面板。</p>
+  </div>
+
+</div>

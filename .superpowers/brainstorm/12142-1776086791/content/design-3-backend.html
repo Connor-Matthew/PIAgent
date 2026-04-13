@@ -1,0 +1,151 @@
+<h2>设计 Part 3：后端核心 — Graph Compiler & 执行引擎</h2>
+<p class="subtitle">画布 JSON → LangGraph StateGraph 的编译与执行</p>
+
+<!-- 编译流程 -->
+<div class="mockup">
+  <div class="mockup-header">核心流程：画布 JSON → LangGraph 编译 → 执行</div>
+  <div class="mockup-body" style="padding: 1.5rem;">
+    <div style="font-family: monospace; font-size: 0.78rem; line-height: 2; color: #e2e8f0;">
+
+      <!-- Step 1 -->
+      <div style="display:flex; gap:12px; align-items:flex-start; margin-bottom:20px;">
+        <span style="background:#3b82f6; color:white; min-width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:0.75rem; flex-shrink:0;">1</span>
+        <div>
+          <div style="color:#93c5fd; font-weight:600; margin-bottom:4px;">前端提交画布 JSON</div>
+          <div style="background:#0f172a; border-radius:8px; padding:12px; font-size:0.72rem; color:#94a3b8; line-height:1.6;">
+            POST /api/workflows/{id}/run<br>
+            <span style="color:#fbbf24;">Body:</span> { "input": "帮我做一期 AI 教育播客" }<br><br>
+            <span style="color:#64748b;">// 工作流定义已保存在数据库，包含：</span><br>
+            nodes: [<br>
+            &nbsp;&nbsp;{ id: "start_1", type: "start", data: {} },<br>
+            &nbsp;&nbsp;{ id: "llm_1", type: "llm", data: { provider: "openai", model: "gpt-4o", prompt: "..." } },<br>
+            &nbsp;&nbsp;{ id: "tts_1", type: "tts", data: { provider: "fish_audio", voice: "..." } },<br>
+            &nbsp;&nbsp;{ id: "end_1", type: "end", data: {} }<br>
+            ]<br>
+            edges: [<br>
+            &nbsp;&nbsp;{ source: "start_1", target: "llm_1" },<br>
+            &nbsp;&nbsp;{ source: "llm_1", target: "tts_1" },<br>
+            &nbsp;&nbsp;{ source: "tts_1", target: "end_1" }<br>
+            ]
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 2 -->
+      <div style="display:flex; gap:12px; align-items:flex-start; margin-bottom:20px;">
+        <span style="background:#22c55e; color:white; min-width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:0.75rem; flex-shrink:0;">2</span>
+        <div>
+          <div style="color:#86efac; font-weight:600; margin-bottom:4px;">Graph Compiler 编译为 LangGraph</div>
+          <div style="background:#0f172a; border-radius:8px; padding:12px; font-size:0.72rem; color:#94a3b8; line-height:1.6;">
+            <span style="color:#64748b;"># graph_compiler.py</span><br><br>
+            <span style="color:#c4b5fd;">class</span> <span style="color:#fbbf24;">GraphCompiler</span>:<br>
+            &nbsp;&nbsp;<span style="color:#c4b5fd;">def</span> <span style="color:#93c5fd;">compile</span>(self, workflow_def) -> StateGraph:<br>
+            &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#64748b;"># 1. 验证 DAG（环检测）</span><br>
+            &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#64748b;"># 2. 拓扑排序确定执行顺序</span><br>
+            &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#64748b;"># 3. 为每个节点创建 LangGraph node function</span><br>
+            &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#64748b;"># 4. 根据 edges 添加 LangGraph edges</span><br>
+            &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#64748b;"># 5. 返回编译好的 StateGraph</span><br><br>
+            &nbsp;&nbsp;&nbsp;&nbsp;graph = StateGraph(<span style="color:#fbbf24;">WorkflowState</span>)<br>
+            &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#c4b5fd;">for</span> node <span style="color:#c4b5fd;">in</span> workflow_def.nodes:<br>
+            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;handler = <span style="color:#93c5fd;">NodeRegistry</span>.get(node.type)<br>
+            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;graph.<span style="color:#93c5fd;">add_node</span>(node.id, handler.execute)<br>
+            &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#c4b5fd;">for</span> edge <span style="color:#c4b5fd;">in</span> workflow_def.edges:<br>
+            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;graph.<span style="color:#93c5fd;">add_edge</span>(edge.source, edge.target)<br>
+            &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#c4b5fd;">return</span> graph.<span style="color:#93c5fd;">compile</span>()
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 3 -->
+      <div style="display:flex; gap:12px; align-items:flex-start; margin-bottom:20px;">
+        <span style="background:#a855f7; color:white; min-width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:0.75rem; flex-shrink:0;">3</span>
+        <div>
+          <div style="color:#c4b5fd; font-weight:600; margin-bottom:4px;">LangGraph State 在节点间流转</div>
+          <div style="background:#0f172a; border-radius:8px; padding:12px; font-size:0.72rem; color:#94a3b8; line-height:1.6;">
+            <span style="color:#c4b5fd;">class</span> <span style="color:#fbbf24;">WorkflowState</span>(TypedDict):<br>
+            &nbsp;&nbsp;input: <span style="color:#93c5fd;">str</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#64748b;"># 用户原始输入</span><br>
+            &nbsp;&nbsp;messages: <span style="color:#93c5fd;">list[BaseMessage]</span> <span style="color:#64748b;"># LLM 对话历史</span><br>
+            &nbsp;&nbsp;context: <span style="color:#93c5fd;">str</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#64748b;"># RAG 检索的上下文</span><br>
+            &nbsp;&nbsp;llm_output: <span style="color:#93c5fd;">str</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#64748b;"># LLM 生成的文本</span><br>
+            &nbsp;&nbsp;audio_url: <span style="color:#93c5fd;">str</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#64748b;"># TTS 生成的音频 URL</span><br>
+            &nbsp;&nbsp;node_outputs: <span style="color:#93c5fd;">dict</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#64748b;"># 各节点输出快照</span><br><br>
+            <span style="color:#64748b;">状态流转:</span><br>
+            <span style="color:#3b82f6;">Start</span> → state.input = "AI 教育播客"<br>
+            <span style="color:#a855f7;">LLM</span> &nbsp;&nbsp;→ state.llm_output = "大家好，欢迎收听..."<br>
+            <span style="color:#fbbf24;">TTS</span> &nbsp;&nbsp;→ state.audio_url = "/audio/xxx.mp3"<br>
+            <span style="color:#64748b;">End</span> &nbsp;&nbsp;→ 返回 state 给前端
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 4 -->
+      <div style="display:flex; gap:12px; align-items:flex-start;">
+        <span style="background:#f97316; color:white; min-width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:0.75rem; flex-shrink:0;">4</span>
+        <div>
+          <div style="color:#fdba74; font-weight:600; margin-bottom:4px;">SSE 实时推送节点状态</div>
+          <div style="background:#0f172a; border-radius:8px; padding:12px; font-size:0.72rem; color:#94a3b8; line-height:1.6;">
+            GET /api/workflows/{id}/runs/{run_id}/events<br>
+            <span style="color:#fbbf24;">Content-Type:</span> text/event-stream<br><br>
+            <span style="color:#22c55e;">event:</span> node_start &nbsp;&nbsp;<span style="color:#64748b;">// { node_id: "llm_1", status: "running" }</span><br>
+            <span style="color:#22c55e;">event:</span> node_stream &nbsp;<span style="color:#64748b;">// { node_id: "llm_1", chunk: "大家好，" }  ← LLM 流式</span><br>
+            <span style="color:#22c55e;">event:</span> node_stream &nbsp;<span style="color:#64748b;">// { node_id: "llm_1", chunk: "欢迎收听..." }</span><br>
+            <span style="color:#22c55e;">event:</span> node_end &nbsp;&nbsp;&nbsp;<span style="color:#64748b;">// { node_id: "llm_1", status: "completed", duration: 3.2 }</span><br>
+            <span style="color:#22c55e;">event:</span> node_start &nbsp;&nbsp;<span style="color:#64748b;">// { node_id: "tts_1", status: "running" }</span><br>
+            <span style="color:#22c55e;">event:</span> node_end &nbsp;&nbsp;&nbsp;<span style="color:#64748b;">// { node_id: "tts_1", output: { audio_url: "/audio/xxx.mp3" } }</span><br>
+            <span style="color:#22c55e;">event:</span> workflow_end <span style="color:#64748b;">// { status: "completed", duration: 8.5 }</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- API 设计 -->
+<h2 style="margin-top: 2.5rem;">API 设计</h2>
+<p class="subtitle">RESTful CRUD + SSE 执行通道</p>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+
+  <div style="background:rgba(59,130,246,0.08); border:1px solid rgba(59,130,246,0.25); border-radius:12px; padding:1.2rem;">
+    <h3 style="margin-top:0; font-size:0.95rem; color:#93c5fd;">工作流 CRUD</h3>
+    <div style="font-family:monospace; font-size:0.72rem; color:#94a3b8; line-height:2;">
+      <span style="color:#22c55e;">GET</span>&nbsp;&nbsp;&nbsp; /api/workflows<br>
+      <span style="color:#3b82f6;">POST</span>&nbsp;&nbsp; /api/workflows<br>
+      <span style="color:#22c55e;">GET</span>&nbsp;&nbsp;&nbsp; /api/workflows/{id}<br>
+      <span style="color:#fbbf24;">PUT</span>&nbsp;&nbsp;&nbsp; /api/workflows/{id}<br>
+      <span style="color:#f87171;">DELETE</span> /api/workflows/{id}
+    </div>
+  </div>
+
+  <div style="background:rgba(168,85,247,0.08); border:1px solid rgba(168,85,247,0.25); border-radius:12px; padding:1.2rem;">
+    <h3 style="margin-top:0; font-size:0.95rem; color:#c4b5fd;">工作流执行</h3>
+    <div style="font-family:monospace; font-size:0.72rem; color:#94a3b8; line-height:2;">
+      <span style="color:#3b82f6;">POST</span>&nbsp;&nbsp; /api/workflows/{id}/run<br>
+      <span style="color:#22c55e;">GET</span>&nbsp;&nbsp;&nbsp; /api/workflows/{id}/runs<br>
+      <span style="color:#22c55e;">GET</span>&nbsp;&nbsp;&nbsp; /api/workflows/{id}/runs/{rid}<br>
+      <span style="color:#22c55e;">SSE</span>&nbsp;&nbsp;&nbsp; /api/workflows/{id}/runs/{rid}/events
+    </div>
+  </div>
+
+  <div style="background:rgba(34,197,94,0.08); border:1px solid rgba(34,197,94,0.25); border-radius:12px; padding:1.2rem;">
+    <h3 style="margin-top:0; font-size:0.95rem; color:#86efac;">知识库 (RAG)</h3>
+    <div style="font-family:monospace; font-size:0.72rem; color:#94a3b8; line-height:2;">
+      <span style="color:#3b82f6;">POST</span>&nbsp;&nbsp; /api/knowledge-bases<br>
+      <span style="color:#3b82f6;">POST</span>&nbsp;&nbsp; /api/knowledge-bases/{id}/upload<br>
+      <span style="color:#22c55e;">GET</span>&nbsp;&nbsp;&nbsp; /api/knowledge-bases/{id}<br>
+      <span style="color:#3b82f6;">POST</span>&nbsp;&nbsp; /api/knowledge-bases/{id}/query
+    </div>
+  </div>
+
+  <div style="background:rgba(251,191,36,0.08); border:1px solid rgba(251,191,36,0.25); border-radius:12px; padding:1.2rem;">
+    <h3 style="margin-top:0; font-size:0.95rem; color:#fbbf24;">模型 & 配置</h3>
+    <div style="font-family:monospace; font-size:0.72rem; color:#94a3b8; line-height:2;">
+      <span style="color:#22c55e;">GET</span>&nbsp;&nbsp;&nbsp; /api/providers<br>
+      <span style="color:#22c55e;">GET</span>&nbsp;&nbsp;&nbsp; /api/providers/{name}/models<br>
+      <span style="color:#3b82f6;">POST</span>&nbsp;&nbsp; /api/providers/{name}/test<br>
+      <span style="color:#22c55e;">GET</span>&nbsp;&nbsp;&nbsp; /api/audio/{filename}
+    </div>
+  </div>
+
+</div>

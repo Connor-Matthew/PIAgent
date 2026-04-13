@@ -5,8 +5,9 @@ from sqlalchemy.orm import sessionmaker
 
 from backend.database import Base, get_db
 from backend.main import app
+import backend.models
 
-TEST_DB_URL = "sqlite:///./test.db"
+TEST_DB_URL = "sqlite:///:memory:"
 test_engine = create_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
 TestSession = sessionmaker(bind=test_engine)
 
@@ -27,10 +28,7 @@ def db():
 @pytest.fixture
 def client(db):
     def override_get_db():
-        try:
-            yield db
-        finally:
-            pass
+        yield db
     app.dependency_overrides[get_db] = override_get_db
     with TestClient(app) as c:
         yield c

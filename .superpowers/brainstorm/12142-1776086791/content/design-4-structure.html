@@ -1,0 +1,147 @@
+<h2>设计 Part 4：项目结构 & 技术细节</h2>
+<p class="subtitle">前后端分离，清晰分层</p>
+
+<div class="split">
+  <!-- 后端目录 -->
+  <div class="mockup">
+    <div class="mockup-header">后端 — backend/</div>
+    <div class="mockup-body" style="padding: 1rem;">
+      <div style="font-family: monospace; font-size: 0.72rem; line-height: 1.9; color: #94a3b8;">
+        <span style="color:#fbbf24;">backend/</span><br>
+        ├── <span style="color:#93c5fd;">main.py</span> <span style="color:#475569;">— FastAPI 入口</span><br>
+        ├── <span style="color:#fbbf24;">api/</span><br>
+        │&nbsp;&nbsp; ├── <span style="color:#93c5fd;">workflows.py</span> <span style="color:#475569;">— 工作流 CRUD + 执行</span><br>
+        │&nbsp;&nbsp; ├── <span style="color:#93c5fd;">knowledge.py</span> <span style="color:#475569;">— 知识库管理</span><br>
+        │&nbsp;&nbsp; └── <span style="color:#93c5fd;">providers.py</span> <span style="color:#475569;">— 模型 Provider</span><br>
+        ├── <span style="color:#fbbf24;">core/</span><br>
+        │&nbsp;&nbsp; ├── <span style="color:#93c5fd;">compiler.py</span> <span style="color:#475569;">— Graph Compiler ⭐</span><br>
+        │&nbsp;&nbsp; ├── <span style="color:#93c5fd;">engine.py</span> <span style="color:#475569;">— 执行引擎 + SSE</span><br>
+        │&nbsp;&nbsp; └── <span style="color:#93c5fd;">state.py</span> <span style="color:#475569;">— WorkflowState 定义</span><br>
+        ├── <span style="color:#fbbf24;">nodes/</span> <span style="color:#475569;">— 节点实现 ⭐</span><br>
+        │&nbsp;&nbsp; ├── <span style="color:#93c5fd;">base.py</span> <span style="color:#475569;">— BaseNode 抽象基类</span><br>
+        │&nbsp;&nbsp; ├── <span style="color:#93c5fd;">start_node.py</span><br>
+        │&nbsp;&nbsp; ├── <span style="color:#93c5fd;">llm_node.py</span> <span style="color:#475569;">— LangChain ChatModel</span><br>
+        │&nbsp;&nbsp; ├── <span style="color:#93c5fd;">rag_node.py</span> <span style="color:#475569;">— Retriever + VectorStore</span><br>
+        │&nbsp;&nbsp; ├── <span style="color:#93c5fd;">agent_node.py</span> <span style="color:#475569;">— ReAct Agent</span><br>
+        │&nbsp;&nbsp; ├── <span style="color:#93c5fd;">tts_node.py</span> <span style="color:#475569;">— TTS Tool</span><br>
+        │&nbsp;&nbsp; ├── <span style="color:#93c5fd;">end_node.py</span><br>
+        │&nbsp;&nbsp; └── <span style="color:#93c5fd;">registry.py</span> <span style="color:#475569;">— 节点注册表</span><br>
+        ├── <span style="color:#fbbf24;">providers/</span> <span style="color:#475569;">— LLM Provider 适配</span><br>
+        │&nbsp;&nbsp; ├── <span style="color:#93c5fd;">base.py</span> <span style="color:#475569;">— BaseLLMProvider</span><br>
+        │&nbsp;&nbsp; ├── <span style="color:#93c5fd;">openai.py</span><br>
+        │&nbsp;&nbsp; ├── <span style="color:#93c5fd;">anthropic.py</span><br>
+        │&nbsp;&nbsp; ├── <span style="color:#93c5fd;">google.py</span><br>
+        │&nbsp;&nbsp; └── <span style="color:#93c5fd;">deepseek.py</span><br>
+        ├── <span style="color:#fbbf24;">tts/</span> <span style="color:#475569;">— TTS 抽象层</span><br>
+        │&nbsp;&nbsp; ├── <span style="color:#93c5fd;">base.py</span> <span style="color:#475569;">— BaseTTSProvider</span><br>
+        │&nbsp;&nbsp; └── <span style="color:#93c5fd;">fish_audio.py</span><br>
+        ├── <span style="color:#fbbf24;">rag/</span> <span style="color:#475569;">— RAG 组件</span><br>
+        │&nbsp;&nbsp; ├── <span style="color:#93c5fd;">embeddings.py</span> <span style="color:#475569;">— Embedding 模型</span><br>
+        │&nbsp;&nbsp; ├── <span style="color:#93c5fd;">vectorstore.py</span> <span style="color:#475569;">— Chroma 封装</span><br>
+        │&nbsp;&nbsp; └── <span style="color:#93c5fd;">loader.py</span> <span style="color:#475569;">— 文档加载 + 分块</span><br>
+        ├── <span style="color:#fbbf24;">models/</span> <span style="color:#475569;">— SQLAlchemy ORM</span><br>
+        │&nbsp;&nbsp; ├── <span style="color:#93c5fd;">workflow.py</span><br>
+        │&nbsp;&nbsp; ├── <span style="color:#93c5fd;">run.py</span><br>
+        │&nbsp;&nbsp; └── <span style="color:#93c5fd;">knowledge_base.py</span><br>
+        ├── <span style="color:#93c5fd;">database.py</span> <span style="color:#475569;">— SQLite 连接</span><br>
+        └── <span style="color:#93c5fd;">config.py</span> <span style="color:#475569;">— 配置管理</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 前端目录 -->
+  <div class="mockup">
+    <div class="mockup-header">前端 — frontend/</div>
+    <div class="mockup-body" style="padding: 1rem;">
+      <div style="font-family: monospace; font-size: 0.72rem; line-height: 1.9; color: #94a3b8;">
+        <span style="color:#fbbf24;">frontend/</span> <span style="color:#475569;">— Vite + React + TS</span><br>
+        ├── <span style="color:#fbbf24;">src/</span><br>
+        │&nbsp;&nbsp; ├── <span style="color:#93c5fd;">App.tsx</span><br>
+        │&nbsp;&nbsp; ├── <span style="color:#fbbf24;">components/</span><br>
+        │&nbsp;&nbsp; │&nbsp;&nbsp; ├── <span style="color:#fbbf24;">canvas/</span> <span style="color:#475569;">— React Flow 画布 ⭐</span><br>
+        │&nbsp;&nbsp; │&nbsp;&nbsp; │&nbsp;&nbsp; ├── <span style="color:#93c5fd;">WorkflowCanvas.tsx</span><br>
+        │&nbsp;&nbsp; │&nbsp;&nbsp; │&nbsp;&nbsp; ├── <span style="color:#93c5fd;">CanvasToolbar.tsx</span><br>
+        │&nbsp;&nbsp; │&nbsp;&nbsp; │&nbsp;&nbsp; └── <span style="color:#93c5fd;">MiniMap.tsx</span><br>
+        │&nbsp;&nbsp; │&nbsp;&nbsp; ├── <span style="color:#fbbf24;">nodes/</span> <span style="color:#475569;">— 自定义节点组件 ⭐</span><br>
+        │&nbsp;&nbsp; │&nbsp;&nbsp; │&nbsp;&nbsp; ├── <span style="color:#93c5fd;">StartNode.tsx</span><br>
+        │&nbsp;&nbsp; │&nbsp;&nbsp; │&nbsp;&nbsp; ├── <span style="color:#93c5fd;">LLMNode.tsx</span><br>
+        │&nbsp;&nbsp; │&nbsp;&nbsp; │&nbsp;&nbsp; ├── <span style="color:#93c5fd;">RAGNode.tsx</span><br>
+        │&nbsp;&nbsp; │&nbsp;&nbsp; │&nbsp;&nbsp; ├── <span style="color:#93c5fd;">AgentNode.tsx</span><br>
+        │&nbsp;&nbsp; │&nbsp;&nbsp; │&nbsp;&nbsp; ├── <span style="color:#93c5fd;">TTSNode.tsx</span><br>
+        │&nbsp;&nbsp; │&nbsp;&nbsp; │&nbsp;&nbsp; └── <span style="color:#93c5fd;">EndNode.tsx</span><br>
+        │&nbsp;&nbsp; │&nbsp;&nbsp; ├── <span style="color:#fbbf24;">panels/</span><br>
+        │&nbsp;&nbsp; │&nbsp;&nbsp; │&nbsp;&nbsp; ├── <span style="color:#93c5fd;">NodeLibrary.tsx</span> <span style="color:#475569;">— 左侧节点库</span><br>
+        │&nbsp;&nbsp; │&nbsp;&nbsp; │&nbsp;&nbsp; └── <span style="color:#93c5fd;">NodeConfig.tsx</span> <span style="color:#475569;">— 右侧配置面板</span><br>
+        │&nbsp;&nbsp; │&nbsp;&nbsp; ├── <span style="color:#fbbf24;">debug/</span> <span style="color:#475569;">— 调试面板 ⭐</span><br>
+        │&nbsp;&nbsp; │&nbsp;&nbsp; │&nbsp;&nbsp; ├── <span style="color:#93c5fd;">DebugDrawer.tsx</span><br>
+        │&nbsp;&nbsp; │&nbsp;&nbsp; │&nbsp;&nbsp; ├── <span style="color:#93c5fd;">ExecutionTimeline.tsx</span><br>
+        │&nbsp;&nbsp; │&nbsp;&nbsp; │&nbsp;&nbsp; ├── <span style="color:#93c5fd;">NodeStatusCard.tsx</span><br>
+        │&nbsp;&nbsp; │&nbsp;&nbsp; │&nbsp;&nbsp; └── <span style="color:#93c5fd;">AudioPlayer.tsx</span><br>
+        │&nbsp;&nbsp; │&nbsp;&nbsp; └── <span style="color:#fbbf24;">common/</span><br>
+        │&nbsp;&nbsp; ├── <span style="color:#fbbf24;">stores/</span> <span style="color:#475569;">— Zustand 状态管理</span><br>
+        │&nbsp;&nbsp; │&nbsp;&nbsp; ├── <span style="color:#93c5fd;">workflowStore.ts</span> <span style="color:#475569;">— 画布状态</span><br>
+        │&nbsp;&nbsp; │&nbsp;&nbsp; └── <span style="color:#93c5fd;">debugStore.ts</span> <span style="color:#475569;">— 调试状态</span><br>
+        │&nbsp;&nbsp; ├── <span style="color:#fbbf24;">hooks/</span><br>
+        │&nbsp;&nbsp; │&nbsp;&nbsp; ├── <span style="color:#93c5fd;">useSSE.ts</span> <span style="color:#475569;">— SSE 事件监听</span><br>
+        │&nbsp;&nbsp; │&nbsp;&nbsp; └── <span style="color:#93c5fd;">useWorkflow.ts</span><br>
+        │&nbsp;&nbsp; ├── <span style="color:#fbbf24;">services/</span> <span style="color:#475569;">— API 调用</span><br>
+        │&nbsp;&nbsp; │&nbsp;&nbsp; └── <span style="color:#93c5fd;">api.ts</span><br>
+        │&nbsp;&nbsp; └── <span style="color:#fbbf24;">types/</span><br>
+        │&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; └── <span style="color:#93c5fd;">workflow.ts</span> <span style="color:#475569;">— 类型定义</span><br>
+        ├── <span style="color:#93c5fd;">package.json</span><br>
+        ├── <span style="color:#93c5fd;">vite.config.ts</span><br>
+        └── <span style="color:#93c5fd;">tsconfig.json</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 关键技术点 -->
+<h2 style="margin-top: 2.5rem;">面试高频考点 & 项目亮点</h2>
+<p class="subtitle">每个点都能展开聊 5-10 分钟</p>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+
+  <div style="background:rgba(168,85,247,0.08); border:1px solid rgba(168,85,247,0.2); border-radius:10px; padding:1rem;">
+    <h3 style="margin-top:0; font-size:0.85rem; color:#c4b5fd;">1. LangGraph 图编译</h3>
+    <p style="font-size:0.75rem; color:#94a3b8; margin:0;">前端画布 JSON → DAG 验证（环检测）→ 拓扑排序 → LangGraph StateGraph。面试官最爱问：你怎么把可视化图转成可执行图？</p>
+  </div>
+
+  <div style="background:rgba(34,197,94,0.08); border:1px solid rgba(34,197,94,0.2); border-radius:10px; padding:1rem;">
+    <h3 style="margin-top:0; font-size:0.85rem; color:#86efac;">2. RAG 全链路</h3>
+    <p style="font-size:0.75rem; color:#94a3b8; margin:0;">文档加载 → 分块策略 → Embedding → Chroma 存储 → 相似度检索 → (可选 Reranking) → 上下文注入 LLM。能聊分块大小选择、检索准确率优化。</p>
+  </div>
+
+  <div style="background:rgba(236,72,153,0.08); border:1px solid rgba(236,72,153,0.2); border-radius:10px; padding:1rem;">
+    <h3 style="margin-top:0; font-size:0.85rem; color:#f472b6;">3. ReAct Agent 自主决策</h3>
+    <p style="font-size:0.75rem; color:#94a3b8; margin:0;">LLM 思考(Thought) → 决定行动(Action) → 观察结果(Observation) → 循环。能聊 Tool Calling 机制、Agent 陷入死循环怎么处理。</p>
+  </div>
+
+  <div style="background:rgba(251,191,36,0.08); border:1px solid rgba(251,191,36,0.2); border-radius:10px; padding:1rem;">
+    <h3 style="margin-top:0; font-size:0.85rem; color:#fbbf24;">4. LLM 流式输出 + SSE</h3>
+    <p style="font-size:0.75rem; color:#94a3b8; margin:0;">LangChain streaming → FastAPI StreamingResponse → SSE → 前端逐 token 渲染。能聊背压控制、断线重连、EventSource API。</p>
+  </div>
+
+  <div style="background:rgba(59,130,246,0.08); border:1px solid rgba(59,130,246,0.2); border-radius:10px; padding:1rem;">
+    <h3 style="margin-top:0; font-size:0.85rem; color:#93c5fd;">5. 多 Provider 策略模式</h3>
+    <p style="font-size:0.75rem; color:#94a3b8; margin:0;">BaseLLMProvider 抽象 → OpenAI / Anthropic / Google 各自实现。面试聊设计模式的最佳案例：策略模式 + 工厂模式。</p>
+  </div>
+
+  <div style="background:rgba(244,114,182,0.08); border:1px solid rgba(244,114,182,0.2); border-radius:10px; padding:1rem;">
+    <h3 style="margin-top:0; font-size:0.85rem; color:#f472b6;">6. React Flow 自定义节点</h3>
+    <p style="font-size:0.75rem; color:#94a3b8; margin:0;">自定义节点渲染、Handle 连接验证、拖拽交互、画布状态序列化。前端面试的加分项。</p>
+  </div>
+
+</div>
+
+<!-- 技术栈总览 -->
+<div class="section" style="margin-top: 2rem; padding: 1.5rem; border-radius: 12px; background: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.2);">
+  <h3 style="margin-top:0; font-size: 0.95rem;">技术栈总览（简历用）</h3>
+  <div style="font-size: 0.8rem; color: #94a3b8; line-height: 2;">
+    <strong style="color:#93c5fd;">前端：</strong>React 18 + TypeScript + React Flow + Zustand + Vite + TailwindCSS<br>
+    <strong style="color:#86efac;">后端：</strong>Python 3.12 + FastAPI + LangChain + LangGraph + SQLAlchemy<br>
+    <strong style="color:#c4b5fd;">AI/Agent：</strong>LangGraph StateGraph + ReAct Agent + RAG (Chroma + Embedding) + Tool Calling<br>
+    <strong style="color:#fbbf24;">通信：</strong>RESTful API + SSE (Server-Sent Events) + LLM Streaming<br>
+    <strong style="color:#f87171;">存储：</strong>SQLite + Chroma (向量数据库)
+  </div>
+</div>

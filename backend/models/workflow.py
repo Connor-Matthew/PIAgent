@@ -20,4 +20,4 @@ class Workflow(Base):
 
     @graph.setter
     def graph(self, value: dict):
-        self.graph_json = json.dumps(value)
+        self.graph_json = json.dumps(value, ensure_ascii=False)

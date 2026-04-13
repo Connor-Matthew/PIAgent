@@ -1,0 +1,85 @@
+<h2>重构架构方案 — 以 Agent 生态为核心</h2>
+<p class="subtitle">目标：让简历和面试都围绕 LangChain / LangGraph / RAG / Agent 展开</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>方案 A：LangGraph 驱动引擎（推荐）</h3>
+      <p><strong>核心思路：</strong>前端 React Flow 负责可视化编排，后端将画布 JSON 编译为 LangGraph StateGraph 执行</p>
+      <div style="background: rgba(255,255,255,0.05); border-radius: 8px; padding: 1rem; margin: 0.8rem 0; font-family: monospace; font-size: 0.85rem; line-height: 1.8;">
+        <span style="color:#93c5fd;">前端 React Flow</span> → 画布 JSON →
+        <span style="color:#86efac;">FastAPI</span> → 编译为 →
+        <span style="color:#fbbf24;">LangGraph StateGraph</span><br>
+        &nbsp;&nbsp;├── <span style="color:#c4b5fd;">LLM Node</span> → LangChain ChatModel (多 Provider)<br>
+        &nbsp;&nbsp;├── <span style="color:#c4b5fd;">RAG Node</span> → LangChain Retriever + VectorStore<br>
+        &nbsp;&nbsp;├── <span style="color:#c4b5fd;">Agent Node</span> → ReAct Agent (自主 Tool Calling)<br>
+        &nbsp;&nbsp;├── <span style="color:#c4b5fd;">TTS Node</span> → LangChain Tool (音频合成)<br>
+        &nbsp;&nbsp;└── <span style="color:#f87171;">SSE</span> → 实时推送节点状态到前端
+      </div>
+      <div class="pros-cons">
+        <div class="pros">
+          <h4>优势</h4>
+          <ul>
+            <li>LangGraph 原生支持状态图、条件分支、循环</li>
+            <li>面试亮点最多：LangGraph + LangChain + RAG + Agent 全覆盖</li>
+            <li>LangSmith 可接入做调试追踪（又一个加分项）</li>
+            <li>前端画布 → LangGraph 的编译过程本身就是很好的技术话题</li>
+          </ul>
+        </div>
+        <div class="cons">
+          <h4>注意</h4>
+          <ul>
+            <li>LangGraph 学习曲线稍陡</li>
+            <li>需要设计好画布 JSON → StateGraph 的映射逻辑</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>方案 B：LangChain LCEL 链式引擎</h3>
+      <p><strong>核心思路：</strong>不用 LangGraph，用 LangChain 的 LCEL (LangChain Expression Language) 将节点串成 Chain 执行</p>
+      <div style="background: rgba(255,255,255,0.05); border-radius: 8px; padding: 1rem; margin: 0.8rem 0; font-family: monospace; font-size: 0.85rem; line-height: 1.8;">
+        <span style="color:#93c5fd;">前端 React Flow</span> → 画布 JSON →
+        <span style="color:#86efac;">FastAPI</span> → 编译为 →
+        <span style="color:#fbbf24;">LCEL RunnableSequence</span><br>
+        &nbsp;&nbsp;├── ChatPromptTemplate | ChatModel | OutputParser<br>
+        &nbsp;&nbsp;├── Retriever | LLM (RAG 链)<br>
+        &nbsp;&nbsp;└── Custom Runnable (TTS)
+      </div>
+      <div class="pros-cons">
+        <div class="pros">
+          <h4>优势</h4>
+          <ul>
+            <li>LCEL 更简单直接，学习成本低</li>
+            <li>适合线性链式流程</li>
+          </ul>
+        </div>
+        <div class="cons">
+          <h4>局限</h4>
+          <ul>
+            <li>不支持条件分支和循环，图表达能力弱</li>
+            <li>面试深度不如 LangGraph</li>
+            <li>Agent 自主决策能力有限</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top: 2rem; padding: 1.5rem; border-radius: 12px; background: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.2);">
+  <h3 style="margin-top:0;">💡 推荐方案 A</h3>
+  <p>LangGraph 就是为"图执行"设计的，和我们的"流图执行面板"天然匹配。而且它带来的面试话题密度最高：</p>
+  <ul style="margin-bottom:0;">
+    <li><strong>图编译：</strong>"我如何将前端可视化画布编译为 LangGraph 状态图"</li>
+    <li><strong>状态管理：</strong>"LangGraph 的 State 如何在节点间传递和累积"</li>
+    <li><strong>Agent 推理：</strong>"ReAct Agent 节点如何自主决定调用哪个工具"</li>
+    <li><strong>RAG 流程：</strong>"检索增强生成的完整链路：Embedding → 向量检索 → Reranking → LLM"</li>
+    <li><strong>可观测性：</strong>"通过 LangSmith 追踪每次执行的 Token 用量和延迟"</li>
+  </ul>
+</div>
