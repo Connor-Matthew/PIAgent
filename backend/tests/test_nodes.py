@@ -216,3 +216,22 @@ def test_llm_node_unknown_provider_raises():
     node = LLMNode(config={"provider": "unknown_provider"})
     with pytest.raises(ValueError, match="Unknown provider"):
         node._get_chat_model()
+
+
+@pytest.mark.asyncio
+async def test_tts_node_generates_audio_url():
+    from backend.nodes.tts_node import TTSNode
+
+    with patch("backend.nodes.tts_node.TTSNode._get_tts_provider") as mock_get:
+        mock_provider = AsyncMock()
+        mock_provider.synthesize.return_value = "/audio/test123.mp3"
+        mock_get.return_value = mock_provider
+
+        node = TTSNode(config={"provider": "fish_audio", "voice": "default"})
+        state: WorkflowState = {
+            "input": "test", "messages": [], "context": "",
+            "llm_output": "Hello, welcome to the podcast.",
+            "audio_url": "", "node_outputs": {},
+        }
+        result = await node.execute(state)
+        assert result["audio_url"].endswith(".mp3")
