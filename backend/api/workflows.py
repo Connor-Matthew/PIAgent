@@ -1,5 +1,6 @@
 import json
 import asyncio
+import time
 from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -109,7 +110,7 @@ def delete_workflow(workflow_id: str, db: Session = Depends(get_db)):
 # --- Execution ---
 
 @router.post("/{workflow_id}/run")
-async def run_workflow(workflow_id: str, body: RunCreate, db: Session = Depends(get_db)):
+def run_workflow(workflow_id: str, body: RunCreate, db: Session = Depends(get_db)):
     wf = db.query(Workflow).filter(Workflow.id == workflow_id).first()
     if not wf:
         raise HTTPException(status_code=404, detail="Workflow not found")
@@ -120,11 +121,19 @@ async def run_workflow(workflow_id: str, body: RunCreate, db: Session = Depends(
     db.refresh(run)
 
     engine = ExecutionEngine()
-    result = await engine.run(wf.graph, user_input=body.input)
+    start = time.time()
+    try:
+        result = asyncio.run(engine.run(wf.graph, user_input=body.input))
+    except Exception as exc:
+        run.status = "failed"
+        run.output = {"error": str(exc)}
+        run.duration = time.time() - start
+        db.commit()
+        raise
 
     run.status = "completed"
     run.output = result
-    run.duration = result.get("node_outputs", {}).get("end", {}).get("duration", 0)
+    run.duration = time.time() - start
     db.commit()
 
     return {"run_id": run.id, "status": "completed", "output": result}
@@ -150,14 +159,21 @@ async def stream_run_events(workflow_id: str, run_id: str, db: Session = Depends
         engine = ExecutionEngine()
 
         async def execute():
-            result = await engine.run(wf.graph, user_input=run.input_text, on_event=on_event)
-            await queue.put(None)  # Signal completion
+            try:
+                result = await engine.run(wf.graph, user_input=run.input_text, on_event=on_event)
+            except Exception as exc:
+                await queue.put({"type": "workflow_end", "status": "failed", "error": str(exc)})
+            finally:
+                await queue.put(None)
 
         task = asyncio.create_task(execute())
 
         while True:
             event = await queue.get()
             if event is None:
+                break
+            if event.get("type") == "workflow_end" and event.get("status") == "failed":
+                yield f"event: {event['type']}\ndata: {json.dumps(event, ensure_ascii=False)}\n\n"
                 break
             yield f"event: {event['type']}\ndata: {json.dumps(event, ensure_ascii=False)}\n\n"
 

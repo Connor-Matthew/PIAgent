@@ -62,3 +62,24 @@ def test_run_workflow(client):
     data = resp.json()
     assert data["status"] == "completed"
     assert "run_id" in data
+
+
+def test_list_runs(client):
+    create_resp = client.post("/api/workflows", json={"name": "Run Test", "graph": SAMPLE_GRAPH})
+    wf_id = create_resp.json()["id"]
+    run_resp = client.post(f"/api/workflows/{wf_id}/run", json={"input": "hello"})
+    assert run_resp.status_code == 200
+    resp = client.get(f"/api/workflows/{wf_id}/runs")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+
+
+def test_stream_run_events(client):
+    create_resp = client.post("/api/workflows", json={"name": "Run Test", "graph": SAMPLE_GRAPH})
+    wf_id = create_resp.json()["id"]
+    run_resp = client.post(f"/api/workflows/{wf_id}/run", json={"input": "hello"})
+    run_id = run_resp.json()["run_id"]
+    resp = client.get(f"/api/workflows/{wf_id}/runs/{run_id}/events")
+    assert resp.status_code == 200
+    assert resp.headers.get("content-type") == "text/event-stream; charset=utf-8"
