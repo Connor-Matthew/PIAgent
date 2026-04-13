@@ -1,7 +1,9 @@
 import time
 from typing import Callable, Awaitable
+
 from backend.core.compiler import GraphCompiler
 from backend.core.state import WorkflowState
+from backend.nodes.registry import node_registry
 
 
 class ExecutionEngine:
@@ -14,7 +16,18 @@ class ExecutionEngine:
         user_input: str,
         on_event: Callable[[dict], Awaitable[None]] | None = None,
     ) -> WorkflowState:
-        """Execute a workflow graph and emit events for each node."""
+        """Execute a workflow graph and emit events for each node.
+
+        Event types emitted:
+        - workflow_start: Emitted before the first node begins execution.
+        - node_start: Emitted before a node begins execution. Contains node_id,
+          node_type, and status.
+        - node_end: Emitted after a node finishes execution. Contains node_id,
+          node_type, status ("completed" or "failed"), duration (seconds),
+          output, and error (if failed).
+        - workflow_end: Emitted after all nodes finish or when a node fails.
+          Contains status ("completed" or "failed") and duration.
+        """
 
         order = self.compiler.topological_sort(graph_json)
         node_map = {n["id"]: n for n in graph_json["nodes"]}
@@ -31,9 +44,12 @@ class ExecutionEngine:
 
         workflow_start = time.time()
 
-        # Import node registry to get handlers
-        from backend.nodes.registry import node_registry
+        if on_event:
+            await on_event({
+                "type": "workflow_start",
+            })
 
+        # Nodes mutate state in-place and return it
         for node_id in order:
             node_def = node_map[node_id]
             node_cls = node_registry.get(node_def["type"])
@@ -51,10 +67,22 @@ class ExecutionEngine:
             node_start = time.time()
 
             # Execute node
-            if node_def["type"] == "start":
+            try:
                 state = await node_instance.execute(state, user_input=user_input)
-            else:
-                state = await node_instance.execute(state)
+            except Exception as exc:
+                if on_event:
+                    await on_event({
+                        "type": "node_end",
+                        "node_id": node_id,
+                        "node_type": node_def["type"],
+                        "status": "failed",
+                        "error": str(exc),
+                    })
+                    await on_event({
+                        "type": "workflow_end",
+                        "status": "failed",
+                    })
+                raise
 
             duration = round(time.time() - node_start, 3)
 
