@@ -7,8 +7,11 @@ from backend.nodes.start_node import StartNode
 from backend.nodes.end_node import EndNode
 
 # Register built-in nodes
-node_registry.register(StartNode)
-node_registry.register(EndNode)
+for node_cls in (StartNode, EndNode):
+    try:
+        node_registry.register(node_cls)
+    except KeyError:
+        pass
 
 
 class CycleDetectedError(Exception):
@@ -19,10 +22,20 @@ class GraphCompiler:
     def validate(self, graph_json: dict):
         """Validate DAG: detect cycles using Kahn's algorithm."""
         nodes = {n["id"] for n in graph_json["nodes"]}
+
+        # Check for duplicate node IDs
+        node_ids = [n["id"] for n in graph_json["nodes"]]
+        if len(node_ids) != len(nodes):
+            raise ValueError("Duplicate node IDs found in workflow graph")
+
         in_degree = defaultdict(int)
         adj = defaultdict(list)
 
         for edge in graph_json["edges"]:
+            if edge["source"] not in nodes:
+                raise ValueError(f"Edge references undeclared source node: {edge['source']}")
+            if edge["target"] not in nodes:
+                raise ValueError(f"Edge references undeclared target node: {edge['target']}")
             adj[edge["source"]].append(edge["target"])
             in_degree[edge["target"]] += 1
 
@@ -72,8 +85,6 @@ class GraphCompiler:
 
     def compile(self, graph_json: dict):
         """Compile workflow JSON into a LangGraph CompiledGraph."""
-        self.validate(graph_json)
-
         graph = StateGraph(WorkflowState)
 
         # Add nodes
@@ -85,6 +96,8 @@ class GraphCompiler:
 
         # Set entry point to the first node in topological order
         order = self.topological_sort(graph_json)
+        if not order:
+            raise ValueError("Workflow graph has no nodes")
         graph.set_entry_point(order[0])
 
         # Add edges
