@@ -65,37 +65,37 @@ class ExecutionEngine:
                 })
 
             node_start = time.time()
-
-            # Execute node
+            duration = 0.0
             try:
                 state = await node_instance.execute(state, user_input=user_input)
             except Exception as exc:
+                duration = round(time.time() - node_start, 3)
                 if on_event:
                     await on_event({
                         "type": "node_end",
                         "node_id": node_id,
                         "node_type": node_def["type"],
                         "status": "failed",
+                        "duration": duration,
                         "error": str(exc),
                     })
                     await on_event({
                         "type": "workflow_end",
                         "status": "failed",
+                        "duration": round(time.time() - workflow_start, 3),
                     })
                 raise
-
-            duration = round(time.time() - node_start, 3)
-
-            # Emit node_end
-            if on_event:
-                await on_event({
-                    "type": "node_end",
-                    "node_id": node_id,
-                    "node_type": node_def["type"],
-                    "status": "completed",
-                    "duration": duration,
-                    "output": state.get("node_outputs", {}).get(node_id, {}),
-                })
+            else:
+                duration = round(time.time() - node_start, 3)
+                if on_event:
+                    await on_event({
+                        "type": "node_end",
+                        "node_id": node_id,
+                        "node_type": node_def["type"],
+                        "status": "completed",
+                        "duration": duration,
+                        "output": state.get("node_outputs", {}).get(node_id, {}),
+                    })
 
         total_duration = round(time.time() - workflow_start, 3)
 

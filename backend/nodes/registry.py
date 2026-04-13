@@ -20,6 +20,10 @@ class NodeRegistry:
     def list_types(self) -> list[str]:
         return list(self._registry.keys())
 
+    def unregister(self, node_type: str):
+        if node_type in self._registry:
+            del self._registry[node_type]
+
 
 # Global registry instance
 node_registry = NodeRegistry()

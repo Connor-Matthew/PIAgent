@@ -86,33 +86,35 @@ async def test_engine_emits_failed_event_on_error():
 
     # Register the fake node
     node_registry.register(ExplodingNode)
+    try:
+        graph_json = {
+            "nodes": [
+                {"id": "start_1", "type": "start", "data": {}},
+                {"id": "boom_1", "type": "exploding", "data": {}},
+            ],
+            "edges": [
+                {"source": "start_1", "target": "boom_1"},
+            ],
+        }
 
-    graph_json = {
-        "nodes": [
-            {"id": "start_1", "type": "start", "data": {}},
-            {"id": "boom_1", "type": "exploding", "data": {}},
-        ],
-        "edges": [
-            {"source": "start_1", "target": "boom_1"},
-        ],
-    }
+        events = []
+        async def on_event(event):
+            events.append(event)
 
-    events = []
-    async def on_event(event):
-        events.append(event)
+        engine = ExecutionEngine()
 
-    engine = ExecutionEngine()
+        with pytest.raises(RuntimeError, match="boom"):
+            await engine.run(graph_json, user_input="hello", on_event=on_event)
 
-    with pytest.raises(RuntimeError, match="boom"):
-        await engine.run(graph_json, user_input="hello", on_event=on_event)
+        # Verify failed events are emitted before the exception propagates
+        node_end_events = [e for e in events if e["type"] == "node_end"]
+        failed_node_end = [e for e in node_end_events if e.get("status") == "failed"]
+        assert len(failed_node_end) == 1
+        assert failed_node_end[0]["node_id"] == "boom_1"
+        assert failed_node_end[0]["error"] == "boom"
 
-    # Verify failed events are emitted before the exception propagates
-    node_end_events = [e for e in events if e["type"] == "node_end"]
-    failed_node_end = [e for e in node_end_events if e.get("status") == "failed"]
-    assert len(failed_node_end) == 1
-    assert failed_node_end[0]["node_id"] == "boom_1"
-    assert failed_node_end[0]["error"] == "boom"
-
-    workflow_end_events = [e for e in events if e["type"] == "workflow_end"]
-    assert len(workflow_end_events) == 1
-    assert workflow_end_events[0]["status"] == "failed"
+        workflow_end_events = [e for e in events if e["type"] == "workflow_end"]
+        assert len(workflow_end_events) == 1
+        assert workflow_end_events[0]["status"] == "failed"
+    finally:
+        node_registry.unregister("exploding")
