@@ -8,10 +8,10 @@ from backend.providers.google_provider import GoogleProvider
 from backend.providers.deepseek_provider import DeepSeekProvider
 
 PROVIDERS = {
-    "openai": OpenAIProvider(),
-    "anthropic": AnthropicProvider(),
-    "google": GoogleProvider(),
-    "deepseek": DeepSeekProvider(),
+    "openai": OpenAIProvider,
+    "anthropic": AnthropicProvider,
+    "google": GoogleProvider,
+    "deepseek": DeepSeekProvider,
 }
 
 class LLMNode(BaseNode):
@@ -23,10 +23,11 @@ class LLMNode(BaseNode):
         temperature = self.config.get("temperature", 0.7)
         streaming = self.config.get("streaming", True)
 
-        provider = PROVIDERS.get(provider_name)
-        if not provider:
+        provider_cls = PROVIDERS.get(provider_name)
+        if not provider_cls:
             raise ValueError(f"Unknown provider: {provider_name}")
 
+        provider = provider_cls()
         return provider.get_chat_model(
             model=model_name,
             temperature=temperature,
@@ -42,7 +43,7 @@ class LLMNode(BaseNode):
             messages.append(SystemMessage(content=system_prompt))
 
         # Include RAG context if available
-        user_content = state["input"]
+        user_content = state.get("input", "")
         if state.get("context"):
             user_content = f"Reference context:\n{state['context']}\n\nUser input:\n{state['input']}"
 
@@ -50,9 +51,10 @@ class LLMNode(BaseNode):
 
         response = await chat_model.ainvoke(messages)
 
+        state.setdefault("node_outputs", {})
         state["llm_output"] = response.content
-        state["messages"] = messages + [response]
-        state["node_outputs"][self.config.get("node_id", "llm")] = {
+        state["messages"] = state.get("messages", []) + messages + [response]
+        state["node_outputs"][self.config.get("id", "llm")] = {
             "output": response.content,
         }
 

@@ -53,7 +53,9 @@ class ExecutionEngine:
         for node_id in order:
             node_def = node_map[node_id]
             node_cls = node_registry.get(node_def["type"])
-            node_instance = node_cls(config=node_def.get("data", {}))
+            config = node_def.get("data", {})
+            config["id"] = node_def["id"]
+            node_instance = node_cls(config=config)
 
             # Emit node_start
             if on_event:

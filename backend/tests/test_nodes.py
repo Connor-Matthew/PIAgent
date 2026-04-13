@@ -1,4 +1,5 @@
 import pytest
+from unittest.mock import AsyncMock, patch, MagicMock
 
 from backend.core.state import WorkflowState
 from backend.nodes.registry import NodeRegistry
@@ -120,7 +121,6 @@ async def test_end_node_omitted_node_outputs():
     assert result["node_outputs"]["end"]["llm_output"] == "generated text"
     assert result["node_outputs"]["end"]["audio_url"] == "/audio/test.mp3"
 
-from unittest.mock import AsyncMock, patch, MagicMock
 
 @pytest.mark.asyncio
 async def test_llm_node_generates_output():
@@ -151,3 +151,68 @@ async def test_llm_node_generates_output():
         result = await node.execute(state)
         assert result["llm_output"] == "Generated podcast script about AI."
         assert len(result["messages"]) > 0
+
+
+@pytest.mark.asyncio
+async def test_llm_node_with_rag_context():
+    from backend.nodes.llm_node import LLMNode
+
+    mock_response = MagicMock()
+    mock_response.content = "Answer with context."
+
+    with patch("backend.nodes.llm_node.LLMNode._get_chat_model") as mock_get:
+        mock_model = AsyncMock()
+        mock_model.ainvoke.return_value = mock_response
+        mock_get.return_value = mock_model
+
+        node = LLMNode(config={})
+        state: WorkflowState = {
+            "input": "What is RAG?",
+            "messages": [],
+            "context": "RAG stands for Retrieval-Augmented Generation.",
+            "llm_output": "",
+            "audio_url": "",
+            "node_outputs": {},
+        }
+        result = await node.execute(state)
+        assert result["llm_output"] == "Answer with context."
+        # Verify the user message includes the context
+        user_message = result["messages"][0]
+        assert "RAG stands for Retrieval-Augmented Generation" in user_message.content
+        assert "What is RAG?" in user_message.content
+
+
+@pytest.mark.asyncio
+async def test_llm_node_preserves_message_history():
+    from backend.nodes.llm_node import LLMNode
+    from langchain_core.messages import AIMessage
+
+    mock_response = MagicMock()
+    mock_response.content = "Second response."
+
+    with patch("backend.nodes.llm_node.LLMNode._get_chat_model") as mock_get:
+        mock_model = AsyncMock()
+        mock_model.ainvoke.return_value = mock_response
+        mock_get.return_value = mock_model
+
+        node = LLMNode(config={})
+        existing_message = AIMessage(content="First response.")
+        state: WorkflowState = {
+            "input": "Follow up",
+            "messages": [existing_message],
+            "context": "",
+            "llm_output": "",
+            "audio_url": "",
+            "node_outputs": {},
+        }
+        result = await node.execute(state)
+        assert existing_message in result["messages"]
+        assert len(result["messages"]) == 3  # existing + HumanMessage + response
+
+
+def test_llm_node_unknown_provider_raises():
+    from backend.nodes.llm_node import LLMNode
+
+    node = LLMNode(config={"provider": "unknown_provider"})
+    with pytest.raises(ValueError, match="Unknown provider"):
+        node._get_chat_model()
