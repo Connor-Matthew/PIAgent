@@ -16,5 +16,5 @@ class BaseNode(ABC):
         self.config = config or {}
 
     @abstractmethod
-    async def execute(self, state: WorkflowState) -> WorkflowState:
+    async def execute(self, state: WorkflowState, **kwargs) -> WorkflowState:
         ...
