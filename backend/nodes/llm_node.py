@@ -45,7 +45,7 @@ class LLMNode(BaseNode):
         # Include RAG context if available
         user_content = state.get("input", "")
         if state.get("context"):
-            user_content = f"Reference context:\n{state['context']}\n\nUser input:\n{state['input']}"
+            user_content = f"Reference context:\n{state['context']}\n\nUser input:\n{user_content}"
 
         messages.append(HumanMessage(content=user_content))
 
