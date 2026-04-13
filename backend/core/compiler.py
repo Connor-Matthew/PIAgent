@@ -28,6 +28,13 @@ class GraphCompiler:
         if len(node_ids) != len(nodes):
             raise ValueError("Duplicate node IDs found in workflow graph")
 
+        # Check node types are registered
+        for node_def in graph_json["nodes"]:
+            try:
+                node_registry.get(node_def["type"])
+            except KeyError:
+                raise ValueError(f"Unknown node type: {node_def['type']}")
+
         in_degree = defaultdict(int)
         adj = defaultdict(list)
 

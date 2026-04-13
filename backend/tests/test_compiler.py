@@ -1,5 +1,29 @@
 import pytest
 from backend.core.compiler import GraphCompiler, CycleDetectedError
+from backend.nodes.base import BaseNode
+from backend.nodes.registry import node_registry
+from backend.core.state import WorkflowState
+
+
+class MockLLMNode(BaseNode):
+    node_type = "llm"
+
+    async def execute(self, state: WorkflowState, **kwargs) -> WorkflowState:
+        return state
+
+
+class MockTTSNode(BaseNode):
+    node_type = "tts"
+
+    async def execute(self, state: WorkflowState, **kwargs) -> WorkflowState:
+        return state
+
+
+for _mock_cls in (MockLLMNode, MockTTSNode):
+    try:
+        node_registry.register(_mock_cls)
+    except KeyError:
+        pass
 
 
 def make_graph_json(nodes, edges):
@@ -77,6 +101,20 @@ def test_compiler_empty_graph_raises():
     compiler = GraphCompiler()
     with pytest.raises(ValueError, match="Workflow graph has no nodes"):
         compiler.compile(graph_json)
+
+
+def test_compiler_dangling_source_reference_raises():
+    graph_json = make_graph_json(
+        nodes=[
+            {"id": "start_1", "type": "start", "data": {}},
+        ],
+        edges=[
+            {"source": "missing_node", "target": "start_1"},
+        ],
+    )
+    compiler = GraphCompiler()
+    with pytest.raises(ValueError, match="undeclared source node"):
+        compiler.validate(graph_json)
 
 
 def test_compiler_duplicate_node_ids_raises():
