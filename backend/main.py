@@ -28,6 +28,9 @@ app.add_middleware(
 os.makedirs(settings.audio_dir, exist_ok=True)
 app.mount("/audio", StaticFiles(directory=settings.audio_dir), name="audio")
 
+from backend.api.workflows import router as workflows_router
+app.include_router(workflows_router)
+
 
 @app.get("/api/health")
 def health() -> dict:
