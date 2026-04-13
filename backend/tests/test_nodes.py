@@ -119,3 +119,35 @@ async def test_end_node_omitted_node_outputs():
     result = await node.execute(state)
     assert result["node_outputs"]["end"]["llm_output"] == "generated text"
     assert result["node_outputs"]["end"]["audio_url"] == "/audio/test.mp3"
+
+from unittest.mock import AsyncMock, patch, MagicMock
+
+@pytest.mark.asyncio
+async def test_llm_node_generates_output():
+    from backend.nodes.llm_node import LLMNode
+
+    mock_response = MagicMock()
+    mock_response.content = "Generated podcast script about AI."
+
+    with patch("backend.nodes.llm_node.LLMNode._get_chat_model") as mock_get:
+        mock_model = AsyncMock()
+        mock_model.ainvoke.return_value = mock_response
+        mock_get.return_value = mock_model
+
+        node = LLMNode(config={
+            "provider": "openai",
+            "model": "gpt-4o",
+            "temperature": 0.7,
+            "system_prompt": "You are a podcast writer.",
+        })
+        state: WorkflowState = {
+            "input": "AI in education",
+            "messages": [],
+            "context": "",
+            "llm_output": "",
+            "audio_url": "",
+            "node_outputs": {},
+        }
+        result = await node.execute(state)
+        assert result["llm_output"] == "Generated podcast script about AI."
+        assert len(result["messages"]) > 0

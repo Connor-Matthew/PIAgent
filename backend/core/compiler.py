@@ -5,9 +5,10 @@ from backend.core.state import WorkflowState
 from backend.nodes.registry import node_registry
 from backend.nodes.start_node import StartNode
 from backend.nodes.end_node import EndNode
+from backend.nodes.llm_node import LLMNode
 
 # Register built-in nodes
-for node_cls in (StartNode, EndNode):
+for node_cls in (StartNode, EndNode, LLMNode):
     try:
         node_registry.register(node_cls)
     except KeyError:
