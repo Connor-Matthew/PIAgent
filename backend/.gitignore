@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.db
+*.sqlite3
+.env
+piagent.db
+test.db
+audio_files/
