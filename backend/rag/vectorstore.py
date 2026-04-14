@@ -1,6 +1,5 @@
 from backend.rag.embeddings import get_embedding_model
-
-CHROMA_DIR = "./chroma_data"
+from backend.config import settings
 
 
 def get_vectorstore(collection_name: str, embedding_provider: str = "openai"):
@@ -9,5 +8,5 @@ def get_vectorstore(collection_name: str, embedding_provider: str = "openai"):
     return Chroma(
         collection_name=collection_name,
         embedding_function=embedding,
-        persist_directory=CHROMA_DIR,
+        persist_directory=settings.chroma_dir,
     )

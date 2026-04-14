@@ -314,3 +314,5 @@ async def test_rag_node_retrieves_context():
         result = await node.execute(state)
         assert "AI is transforming" in result["context"]
         assert "Personalized learning" in result["context"]
+        assert result["node_outputs"]["rag"]["retrieved_docs"] == 2
+        assert "AI is transforming" in result["node_outputs"]["rag"]["context_preview"]

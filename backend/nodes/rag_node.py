@@ -19,7 +19,8 @@ class RAGNode(BaseNode):
         docs = await retriever.ainvoke(query)
         context = "\n\n".join(doc.page_content for doc in docs)
 
-        state["context"] = context
+        if docs:
+            state["context"] = context
         state.setdefault("node_outputs", {})
         state["node_outputs"][self.config.get("id", "rag")] = {
             "retrieved_docs": len(docs),

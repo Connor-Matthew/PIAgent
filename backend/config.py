@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     google_api_key: SecretStr = ""
     deepseek_api_key: SecretStr = ""
     fish_audio_api_key: SecretStr = ""
+    chroma_dir: str = "./chroma_data"
     cors_origins: list[str] = ["http://localhost:5173"]
 
     class Config:
