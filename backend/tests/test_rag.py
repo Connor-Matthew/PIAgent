@@ -32,13 +32,14 @@ def test_load_and_split_uses_pdf_loader_for_pdf():
 
 
 def test_get_vectorstore_returns_chroma():
-    with patch("langchain_chroma.Chroma") as mock_chroma, patch(
+    mock_module = MagicMock()
+    mock_module.Chroma.return_value = MagicMock()
+    with patch.dict("sys.modules", {"langchain_chroma": mock_module}), patch(
         "backend.rag.vectorstore.get_embedding_model"
     ) as mock_embed:
-        mock_chroma.return_value = MagicMock()
         mock_embed.return_value = MagicMock()
         vs = get_vectorstore("test_collection")
-        mock_chroma.assert_called_once()
-        call_kwargs = mock_chroma.call_args.kwargs
+        mock_module.Chroma.assert_called_once()
+        call_kwargs = mock_module.Chroma.call_args.kwargs
         assert call_kwargs["collection_name"] == "test_collection"
         assert call_kwargs["persist_directory"] == settings.chroma_dir
