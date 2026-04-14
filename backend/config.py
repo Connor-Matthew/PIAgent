@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     anthropic_api_key: SecretStr = ""
     google_api_key: SecretStr = ""
     deepseek_api_key: SecretStr = ""
+    fish_audio_api_key: SecretStr = ""
     cors_origins: list[str] = ["http://localhost:5173"]
 
     class Config:

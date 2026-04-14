@@ -235,3 +235,59 @@ async def test_tts_node_generates_audio_url():
         }
         result = await node.execute(state)
         assert result["audio_url"].endswith(".mp3")
+
+
+def test_tts_node_unknown_provider_raises():
+    from backend.nodes.tts_node import TTSNode
+
+    node = TTSNode(config={"provider": "unknown_provider"})
+    with pytest.raises(ValueError, match="Unknown TTS provider"):
+        node._get_tts_provider()
+
+
+@pytest.mark.asyncio
+async def test_tts_node_fallback_to_input():
+    from backend.nodes.tts_node import TTSNode
+
+    with patch("backend.nodes.tts_node.TTSNode._get_tts_provider") as mock_get:
+        mock_provider = AsyncMock()
+        mock_provider.synthesize.return_value = "/audio/fallback.mp3"
+        mock_get.return_value = mock_provider
+
+        node = TTSNode(config={"provider": "fish_audio", "voice": "default"})
+        state: WorkflowState = {
+            "input": "Fallback text",
+            "messages": [],
+            "context": "",
+            "llm_output": "",
+            "audio_url": "",
+            "node_outputs": {},
+        }
+        result = await node.execute(state)
+        assert result["audio_url"].endswith(".mp3")
+        mock_provider.synthesize.assert_awaited_once()
+        # Verify it used the input text since llm_output was empty
+        call_kwargs = mock_provider.synthesize.await_args.kwargs
+        assert call_kwargs["text"] == "Fallback text"
+
+
+@pytest.mark.asyncio
+async def test_tts_node_populates_node_outputs():
+    from backend.nodes.tts_node import TTSNode
+
+    with patch("backend.nodes.tts_node.TTSNode._get_tts_provider") as mock_get:
+        mock_provider = AsyncMock()
+        mock_provider.synthesize.return_value = "/audio/output.mp3"
+        mock_get.return_value = mock_provider
+
+        node = TTSNode(config={"provider": "fish_audio", "voice": "default", "id": "tts_1"})
+        state: WorkflowState = {
+            "input": "test",
+            "messages": [],
+            "context": "",
+            "llm_output": "Hello world",
+            "audio_url": "",
+            "node_outputs": {},
+        }
+        result = await node.execute(state)
+        assert result["node_outputs"]["tts_1"]["audio_url"] == "/audio/output.mp3"

@@ -20,9 +20,7 @@ class TTSNode(BaseNode):
         return provider_cls()
 
     async def execute(self, state: WorkflowState, **kwargs) -> WorkflowState:
-        text = state.get("llm_output", "")
-        if not text:
-            text = state.get("input", "")
+        text = state.get("llm_output") or state.get("input", "")
 
         provider = self._get_tts_provider()
         voice = self.config.get("voice", "default")

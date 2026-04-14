@@ -99,7 +99,7 @@ class GraphCompiler:
         # Add nodes
         for node_def in graph_json["nodes"]:
             node_cls = node_registry.get(node_def["type"])
-            config = {**node_def.get("data", {}), "id": node_def["id"]}
+            config = {**(node_def.get("data") or {}), "id": node_def["id"]}
             node_instance = node_cls(config=config)
             handler = self._make_handler(node_instance)
             graph.add_node(node_def["id"], handler)

@@ -3,13 +3,14 @@ import uuid
 import httpx
 
 from backend.tts.base import BaseTTSProvider
+from backend.config import settings
 
 
 class FishAudioProvider(BaseTTSProvider):
     name = "fish_audio"
 
-    def __init__(self, api_key: str = "", base_url: str = "https://api.fish.audio"):
-        self.api_key = api_key
+    def __init__(self, api_key: str | None = None, base_url: str = "https://api.fish.audio"):
+        self.api_key = api_key or (settings.fish_audio_api_key.get_secret_value() if settings.fish_audio_api_key else "")
         self.base_url = base_url
 
     async def synthesize(self, text: str, voice: str = "default", output_dir: str = "./audio_files") -> str:
