@@ -316,3 +316,22 @@ async def test_rag_node_retrieves_context():
         assert "Personalized learning" in result["context"]
         assert result["node_outputs"]["rag"]["retrieved_docs"] == 2
         assert "AI is transforming" in result["node_outputs"]["rag"]["context_preview"]
+
+
+@pytest.mark.asyncio
+async def test_rag_node_preserves_context_when_no_docs():
+    from backend.nodes.rag_node import RAGNode
+
+    with patch("backend.nodes.rag_node.RAGNode._get_retriever") as mock_get:
+        mock_retriever = AsyncMock()
+        mock_retriever.ainvoke.return_value = []
+        mock_get.return_value = mock_retriever
+
+        node = RAGNode(config={"knowledge_base_id": "kb1", "top_k": 3})
+        state: WorkflowState = {
+            "input": "AI in education", "messages": [], "context": "existing context",
+            "llm_output": "", "audio_url": "", "node_outputs": {},
+        }
+        result = await node.execute(state)
+        assert result["context"] == "existing context"
+        assert result["node_outputs"]["rag"]["retrieved_docs"] == 0

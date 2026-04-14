@@ -2,6 +2,7 @@ import pytest
 from backend.rag.embeddings import get_embedding_model
 from backend.rag.vectorstore import get_vectorstore
 from backend.rag.loader import load_and_split
+from backend.config import settings
 from unittest.mock import patch, MagicMock
 
 
@@ -40,4 +41,4 @@ def test_get_vectorstore_returns_chroma():
         mock_chroma.assert_called_once()
         call_kwargs = mock_chroma.call_args.kwargs
         assert call_kwargs["collection_name"] == "test_collection"
-        assert call_kwargs["persist_directory"] == "./chroma_data"
+        assert call_kwargs["persist_directory"] == settings.chroma_dir
