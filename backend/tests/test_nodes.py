@@ -291,3 +291,26 @@ async def test_tts_node_populates_node_outputs():
         }
         result = await node.execute(state)
         assert result["node_outputs"]["tts_1"]["audio_url"] == "/audio/output.mp3"
+
+
+@pytest.mark.asyncio
+async def test_rag_node_retrieves_context():
+    from backend.nodes.rag_node import RAGNode
+
+    with patch("backend.nodes.rag_node.RAGNode._get_retriever") as mock_get:
+        from langchain_core.documents import Document
+        mock_retriever = AsyncMock()
+        mock_retriever.ainvoke.return_value = [
+            Document(page_content="AI is transforming education worldwide."),
+            Document(page_content="Personalized learning is a key benefit."),
+        ]
+        mock_get.return_value = mock_retriever
+
+        node = RAGNode(config={"knowledge_base_id": "kb1", "top_k": 3})
+        state: WorkflowState = {
+            "input": "AI in education", "messages": [], "context": "",
+            "llm_output": "", "audio_url": "", "node_outputs": {},
+        }
+        result = await node.execute(state)
+        assert "AI is transforming" in result["context"]
+        assert "Personalized learning" in result["context"]
