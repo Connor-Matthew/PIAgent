@@ -1,3 +1,5 @@
+from unittest.mock import patch, AsyncMock, MagicMock
+
 SAMPLE_GRAPH = {
     "nodes": [
         {"id": "start_1", "type": "start", "data": {}},
@@ -83,3 +85,25 @@ def test_stream_run_events(client):
     resp = client.get(f"/api/workflows/{wf_id}/runs/{run_id}/events")
     assert resp.status_code == 200
     assert resp.headers.get("content-type") == "text/event-stream; charset=utf-8"
+
+
+def test_run_workflow_with_inputs(client):
+    graph = {
+        "nodes": [
+            {"id": "start_1", "type": "start", "data": {"inputs": [{"name": "topic", "type": "text", "required": True}]}},
+            {"id": "end_1", "type": "end", "data": {}},
+        ],
+        "edges": [
+            {"source": "start_1", "target": "end_1"},
+        ],
+    }
+    create_resp = client.post("/api/workflows", json={"name": "Input Test", "graph": graph})
+    wf_id = create_resp.json()["id"]
+    resp = client.post(f"/api/workflows/{wf_id}/run", json={"inputs": {"topic": "RAG 最新进展"}})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "completed"
+    assert data["output"]["inputs"]["topic"] == "RAG 最新进展"
+
+
+

@@ -54,8 +54,8 @@ class LLMNode(BaseNode):
         state.setdefault("node_outputs", {})
         state["llm_output"] = response.content
         state["messages"] = state.get("messages", []) + messages + [response]
-        state["node_outputs"][self.config.get("id", "llm")] = {
-            "output": response.content,
+        state["node_outputs"][self.node_id] = {
+            "text": response.content,
         }
 
         return state

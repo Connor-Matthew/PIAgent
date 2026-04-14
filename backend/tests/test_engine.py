@@ -1,4 +1,6 @@
 import pytest
+from unittest.mock import patch, AsyncMock, MagicMock
+
 from backend.core.engine import ExecutionEngine
 from backend.core.state import WorkflowState
 from backend.nodes.base import BaseNode
@@ -53,6 +55,12 @@ async def test_engine_executes_simple_workflow():
         assert "node_id" in e
         assert "output" in e
 
+    # workflow_end should include answer and outputs
+    workflow_end_events = [e for e in events if e["type"] == "workflow_end"]
+    assert len(workflow_end_events) == 1
+    assert "answer" in workflow_end_events[0]
+    assert "outputs" in workflow_end_events[0]
+
 
 @pytest.mark.asyncio
 async def test_engine_runs_without_event_callback():
@@ -70,7 +78,7 @@ async def test_engine_runs_without_event_callback():
     result = await engine.run(graph_json, user_input="hello", on_event=None)
 
     assert result["input"] == "hello"
-    assert result["node_outputs"]["start"]["input"] == "hello"
+    assert result["node_outputs"]["start_1"]["input"] == "hello"
 
 
 class ExplodingNode(BaseNode):
@@ -90,10 +98,12 @@ async def test_engine_emits_failed_event_on_error():
         graph_json = {
             "nodes": [
                 {"id": "start_1", "type": "start", "data": {}},
+                {"id": "end_1", "type": "end", "data": {}},  # Compiler requires exactly one end
                 {"id": "boom_1", "type": "exploding", "data": {}},
             ],
             "edges": [
                 {"source": "start_1", "target": "boom_1"},
+                {"source": "boom_1", "target": "end_1"},
             ],
         }
 
@@ -118,3 +128,51 @@ async def test_engine_emits_failed_event_on_error():
         assert workflow_end_events[0]["status"] == "failed"
     finally:
         node_registry.unregister("exploding")
+
+
+@pytest.mark.asyncio
+async def test_engine_end_to_end_with_references():
+    """Integration test: Start -> LLM -> TTS -> End with variable references."""
+    graph_json = {
+        "nodes": [
+            {"id": "start_1", "type": "start", "data": {"inputs": [{"name": "topic", "type": "text", "required": True}]}},
+            {"id": "llm_1", "type": "llm", "data": {}},
+            {"id": "tts_1", "type": "tts", "data": {}},
+            {"id": "end_1", "type": "end", "data": {
+                "outputs": [
+                    {"name": "audio_url", "source": "reference", "value": "{{tts_1.audio_url}}"},
+                    {"name": "title", "source": "input", "value": "今天的 AI 播客"},
+                ],
+                "answer": "{{title}}: {{audio_url}}",
+            }},
+        ],
+        "edges": [
+            {"source": "start_1", "target": "llm_1"},
+            {"source": "llm_1", "target": "tts_1"},
+            {"source": "tts_1", "target": "end_1"},
+        ],
+    }
+
+    with patch("backend.nodes.llm_node.LLMNode._get_chat_model") as mock_llm, \
+         patch("backend.nodes.tts_node.TTSNode._get_tts_provider") as mock_tts:
+        mock_model = AsyncMock()
+        mock_response = MagicMock()
+        mock_response.content = "Generated podcast script."
+        mock_model.ainvoke.return_value = mock_response
+        mock_llm.return_value = mock_model
+
+        mock_provider = AsyncMock()
+        mock_provider.synthesize.return_value = "/audio/test.mp3"
+        mock_tts.return_value = mock_provider
+
+        engine = ExecutionEngine()
+        result = await engine.run(
+            graph_json,
+            inputs={"topic": "AI 教育"},
+        )
+
+        assert result["answer"] == "今天的 AI 播客: /audio/test.mp3"
+        assert result["outputs"]["audio_url"] == "/audio/test.mp3"
+        assert result["outputs"]["title"] == "今天的 AI 播客"
+        assert result["node_outputs"]["llm_1"]["text"] == "Generated podcast script."
+        assert result["node_outputs"]["tts_1"]["audio_url"] == "/audio/test.mp3"

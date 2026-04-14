@@ -1,5 +1,8 @@
 # PIAgent — AI Agent 工作流编排平台 设计文档
 
+> **更新记录**
+> - 2026-04-14：默认 Input / Output 节点 + 变量契约阶段已实施完成。后端已新增 `template.py`、扩展 `WorkflowState`、完成 `CompilerError` IO 校验、`/run` 接口支持 `inputs` dict，全部 64 项测试通过。
+
 ## 项目定位
 
 面向 AI Agent 开发方向的全栈项目，用于简历展示和面试。通过可视化拖拽界面编排 AI 工作流，支持大模型调用、RAG 知识检索、ReAct Agent 自主决策、音频合成等多节点协同，最终实现"输入文字 → AI 生成 → 语音合成 → 播客播放"的完整链路。
@@ -45,9 +48,11 @@ SQLite + Chroma
 6 种核心节点类型：
 
 ### 1. 用户输入节点 (Start)
-- 工作流入口
-- 接收用户文本输入，写入 LangGraph State
-- 触发图执行
+- 工作流入口；新建工作流时**默认存在于画布且不可删除**，全图强制有且仅有一个
+- 声明式输入字段 schema：`inputs: [{name, type, required, default, options}]`
+  - `type`：`text` / `number` / `select` / `file`
+  - 调试抽屉的输入区根据此 schema 动态渲染表单
+- 运行时把用户填入的 `{name: value}` 写入 `state["inputs"]` 并冗余到 `state["node_outputs"][start_id]`
 
 ### 2. 大模型节点 (LLM)
 - 通过 LangChain ChatModel 调用 LLM
@@ -73,27 +78,54 @@ SQLite + Chroma
 - 输出音频 URL
 
 ### 6. 结束节点 (End)
-- 工作流终点
-- 汇总所有节点输出（文本 + 音频），返回最终结果给前端
+- 工作流终点；新建工作流时**默认存在于画布且不可删除**，全图强制有且仅有一个
+- 声明式输出变量：`outputs: [{name, source, value}]`
+  - `source = "input"`：`value` 为字面量，按原样输出
+  - `source = "reference"`：`value` 为 `{{nodeId.fieldName}}`，从上游节点输出中取值
+- 回答内容模板：`answer: str`，支持 `{{varName}}`（本节点输出）和 `{{nodeId.fieldName}}`（跨节点引用）两种占位符
+- 运行结束时生成 `state["outputs"]`（结构化）和 `state["answer"]`（渲染后文本），一起随 `workflow_end` 事件返回
 
 ## LangGraph State 设计
 
 ```python
-class WorkflowState(TypedDict):
-    input: str                  # 用户原始输入
-    messages: list[BaseMessage] # LLM 对话历史
-    context: str                # RAG 检索的上下文
-    llm_output: str             # LLM 生成的文本
-    audio_url: str              # TTS 生成的音频 URL
-    node_outputs: dict          # 各节点输出快照
-```
+class WorkflowState(TypedDict, total=False):
+    inputs: dict[str, Any]          # Start 收集的结构化输入，按参数名索引
+    node_outputs: dict[str, dict]   # 每个节点的输出快照：{nodeId: {fieldName: value}}
+    outputs: dict[str, Any]         # End 解析后的结构化输出（对外 API）
+    answer: str                     # End 渲染后的回答内容（面向最终观众）
+    messages: list[BaseMessage]     # LLM 对话历史
 
-状态流转示例：
-- Start → `state.input = "AI 教育播客"`
-- RAG → `state.context = "检索到的相关文档内容..."`
-- LLM → `state.llm_output = "大家好，欢迎收听..."`
-- TTS → `state.audio_url = "/audio/xxx.mp3"`
-- End → 返回完整 state 给前端
+    # Legacy fields (kept for backward compatibility)
+    input: str
+    context: str
+    llm_output: str
+    audio_url: str
+
+约定：每个中间节点在执行结束时**必须**把自己的输出写入 `state["node_outputs"][self.node_id]`，供下游通过 `{{nodeId.fieldName}}` 引用。中间节点的固定输出字段：
+
+| 节点 | 输出字段 |
+|------|---------|
+| llm   | `text` |
+| rag   | `context`, `documents` |
+| agent | `text`, `steps` |
+| tts   | `audio_url`, `duration` |
+| start | 由 `inputs` schema 动态生成 |
+
+## 变量引用语法
+
+End 节点和任何模板字段都通过 `{{...}}` 占位符引用上游数据：
+
+- `{{varName}}` — 本节点已声明的输出变量（优先级最高，仅在 End 节点可用）
+- `{{nodeId.fieldName}}` — 任意上游节点的输出字段（如 `{{llm_1.text}}`、`{{tts_1.audio_url}}`）
+
+解析器位于 `backend/core/template.py`，未命中的引用渲染为空字符串（保持鲁棒，不抛异常）。Compiler 层会校验 `reference` 类型的 End output 必须指向画布中实际存在的 nodeId。
+
+状态流转示例（Start → RAG → LLM → TTS → End）：
+- Start（`inputs: [{name: "topic"}]`，用户填入 `"AI 教育播客"`）→ `state.inputs = {topic: "AI 教育播客"}`
+- RAG → `state.node_outputs["rag_1"] = {context: "...", documents: [...]}`
+- LLM → `state.node_outputs["llm_1"] = {text: "大家好，欢迎收听..."}`
+- TTS → `state.node_outputs["tts_1"] = {audio_url: "/audio/xxx.mp3", duration: 180.3}`
+- End（`outputs: [{name: "audio_url", source: "reference", value: "{{tts_1.audio_url}}"}]`，`answer: "🎧 链接：{{audio_url}}"`）→ `state.outputs = {audio_url: "/audio/xxx.mp3"}`、`state.answer = "🎧 链接：/audio/xxx.mp3"`
 
 ## 前端 UI 设计
 
@@ -112,6 +144,12 @@ class WorkflowState(TypedDict):
 
 ### 右栏：节点配置面板
 - 选中节点后显示详细配置
+- **Start 节点：输入配置** — 动态行表单，每行 `参数名 / 类型（text · number · select · file）/ 必填 / 默认值 / 选项（仅 select）`，点"添加"增加一行
+- **End 节点：输出配置 + 回答内容**
+  - 输出配置：动态行，每行 `参数名 / 类型（输入 · 引用）/ 值`
+    - 类型 = 输入：值是手动输入的字面量
+    - 类型 = 引用：值是两级下拉选择器（上游节点 → 字段），选中后写入 `{{nodeId.fieldName}}`
+  - 回答内容：多行 textarea，支持在光标位置插入 `{{varName}}` 或 `{{nodeId.fieldName}}`
 - LLM 节点：Provider 选择、模型选择、Temperature 滑块、System Prompt 编辑、流式开关
 - RAG 节点：知识库选择、Top-K、相似度阈值
 - TTS 节点：Provider 选择、音色选择
@@ -139,7 +177,7 @@ DELETE /api/workflows/{id}      — 删除工作流
 
 ### 工作流执行
 ```
-POST   /api/workflows/{id}/run              — 触发执行
+POST   /api/workflows/{id}/run              — 触发执行（body: {"inputs": {...}} 按 Start schema 填充）
 GET    /api/workflows/{id}/runs             — 执行记录列表
 GET    /api/workflows/{id}/runs/{rid}       — 执行详情
 GET    /api/workflows/{id}/runs/{rid}/events — SSE 实时事件流
@@ -150,7 +188,7 @@ GET    /api/workflows/{id}/runs/{rid}/events — SSE 实时事件流
 event: node_start    // { node_id, status: "running" }
 event: node_stream   // { node_id, chunk: "文本片段" }  ← LLM 流式
 event: node_end      // { node_id, status: "completed", duration, output }
-event: workflow_end  // { status: "completed", duration }
+event: workflow_end  // { status: "completed", duration, answer, outputs }
 ```
 
 ### 知识库 (RAG)
@@ -178,13 +216,14 @@ backend/
 ├── config.py                — 配置管理
 ├── database.py              — SQLite 连接
 ├── api/
-│   ├── workflows.py         — 工作流 CRUD + 执行
+│   ├── workflows.py         — 工作流 CRUD + 执行（/run 接受 {"inputs": {...}}）
 │   ├── knowledge.py         — 知识库管理
 │   └── providers.py         — 模型 Provider
 ├── core/
-│   ├── compiler.py          — Graph Compiler（画布 JSON → LangGraph）
-│   ├── engine.py            — 执行引擎 + SSE 推送
-│   └── state.py             — WorkflowState 定义
+│   ├── compiler.py          — Graph Compiler（画布 JSON → LangGraph）+ IO 节点唯一性校验 + CompilerError
+│   ├── engine.py            — 执行引擎 + SSE 推送（workflow_end 带 answer / outputs）
+│   ├── state.py             — WorkflowState 定义（inputs / node_outputs / answer / outputs + 兼容字段）
+│   └── template.py          — {{nodeId.fieldName}} / {{varName}} 变量引用解析与模板渲染
 ├── nodes/
 │   ├── base.py              — BaseNode 抽象基类
 │   ├── start_node.py

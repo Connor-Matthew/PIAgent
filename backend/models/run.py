@@ -4,6 +4,16 @@ from sqlalchemy import Column, String, Text, Float, DateTime, ForeignKey
 from backend.database import Base
 import uuid
 
+
+class _RunOutputEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if hasattr(obj, "model_dump"):
+            return obj.model_dump()
+        if hasattr(obj, "dict"):
+            return obj.dict()
+        return super().default(obj)
+
+
 class WorkflowRun(Base):
     __tablename__ = "workflow_runs"
 
@@ -21,4 +31,4 @@ class WorkflowRun(Base):
 
     @output.setter
     def output(self, value: dict):
-        self.output_json = json.dumps(value, ensure_ascii=False)
+        self.output_json = json.dumps(value, ensure_ascii=False, cls=_RunOutputEncoder)

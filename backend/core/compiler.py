@@ -2,6 +2,7 @@ from collections import defaultdict, deque
 from langgraph.graph import StateGraph
 
 from backend.core.state import WorkflowState
+from backend.core.template import REF_RE
 from backend.nodes.registry import node_registry
 from backend.nodes.start_node import StartNode
 from backend.nodes.end_node import EndNode
@@ -22,14 +23,19 @@ class CycleDetectedError(Exception):
     pass
 
 
+class CompilerError(Exception):
+    pass
+
+
 class GraphCompiler:
     def validate(self, graph_json: dict):
         """Validate DAG: detect cycles using Kahn's algorithm."""
-        nodes = {n["id"] for n in graph_json["nodes"]}
+        nodes = {n["id"]: n for n in graph_json["nodes"]}
+        node_ids = set(nodes.keys())
 
         # Check for duplicate node IDs
-        node_ids = [n["id"] for n in graph_json["nodes"]]
-        if len(node_ids) != len(nodes):
+        ids = [n["id"] for n in graph_json["nodes"]]
+        if len(ids) != len(node_ids):
             raise ValueError("Duplicate node IDs found in workflow graph")
 
         # Check node types are registered
@@ -39,18 +45,50 @@ class GraphCompiler:
             except KeyError:
                 raise ValueError(f"Unknown node type: {node_def['type']}")
 
+        # Validate exactly one start and one end node
+        start_nodes = [n for n in graph_json["nodes"] if n["type"] == "start"]
+        end_nodes = [n for n in graph_json["nodes"] if n["type"] == "end"]
+
+        if len(start_nodes) == 0:
+            raise CompilerError("Workflow must contain exactly one start node, found 0")
+        if len(start_nodes) > 1:
+            raise CompilerError(f"Workflow must contain exactly one start node, found {len(start_nodes)}")
+        if len(end_nodes) == 0:
+            raise CompilerError("Workflow must contain exactly one end node, found 0")
+        if len(end_nodes) > 1:
+            raise CompilerError(f"Workflow must contain exactly one end node, found {len(end_nodes)}")
+
+        # Validate end node reference outputs
+        for end_node in end_nodes:
+            for out in (end_node.get("data") or {}).get("outputs", []):
+                if out.get("source") == "reference":
+                    value = out.get("value", "")
+                    if not REF_RE.fullmatch(value):
+                        raise CompilerError(
+                            f"End node '{end_node['id']}' reference output '{out['name']}' "
+                            f"must match {{nodeId.fieldName}} format, got: {value}"
+                        )
+                    ref_match = REF_RE.match(value)
+                    if ref_match:
+                        ref_node_id = ref_match.group(1)
+                        if ref_node_id not in node_ids:
+                            raise CompilerError(
+                                f"End node '{end_node['id']}' reference output '{out['name']}' "
+                                f"points to unknown node: {ref_node_id}"
+                            )
+
         in_degree = defaultdict(int)
         adj = defaultdict(list)
 
         for edge in graph_json["edges"]:
-            if edge["source"] not in nodes:
+            if edge["source"] not in node_ids:
                 raise ValueError(f"Edge references undeclared source node: {edge['source']}")
-            if edge["target"] not in nodes:
+            if edge["target"] not in node_ids:
                 raise ValueError(f"Edge references undeclared target node: {edge['target']}")
             adj[edge["source"]].append(edge["target"])
             in_degree[edge["target"]] += 1
 
-        queue = deque(n for n in nodes if in_degree[n] == 0)
+        queue = deque(n for n in node_ids if in_degree[n] == 0)
         visited = 0
 
         while queue:
@@ -61,7 +99,7 @@ class GraphCompiler:
                 if in_degree[neighbor] == 0:
                     queue.append(neighbor)
 
-        if visited != len(nodes):
+        if visited != len(node_ids):
             raise CycleDetectedError("Workflow graph contains a cycle")
 
     def topological_sort(self, graph_json: dict) -> list[str]:

@@ -22,9 +22,12 @@ class RAGNode(BaseNode):
         if docs:
             state["context"] = context
         state.setdefault("node_outputs", {})
-        state["node_outputs"][self.config.get("id", "rag")] = {
-            "retrieved_docs": len(docs),
-            "context_preview": context[:200],
+        state["node_outputs"][self.node_id] = {
+            "context": context,
+            "documents": [
+                {"page_content": doc.page_content, "metadata": doc.metadata}
+                for doc in docs
+            ],
         }
 
         return state

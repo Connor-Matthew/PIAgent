@@ -106,8 +106,32 @@ async def test_end_node_collects_output():
         "node_outputs": {},
     }
     result = await node.execute(state)
-    assert result["node_outputs"]["end"]["llm_output"] == "generated text"
-    assert result["node_outputs"]["end"]["audio_url"] == "/audio/test.mp3"
+    assert result["node_outputs"]["end"]["outputs"] == {}
+    assert result["node_outputs"]["end"]["answer"] == ""
+
+
+@pytest.mark.asyncio
+async def test_end_node_with_outputs_and_answer():
+    node = EndNode(config={
+        "outputs": [
+            {"name": "audio_url", "source": "reference", "value": "{{tts_1.audio_url}}"},
+            {"name": "title", "source": "input", "value": "今天的 AI 播客"},
+        ],
+        "answer": "🎧 {{title}} 已生成，链接：{{audio_url}}",
+    })
+    state: WorkflowState = {
+        "input": "test", "messages": [], "context": "",
+        "llm_output": "generated text", "audio_url": "/audio/test.mp3",
+        "node_outputs": {
+            "tts_1": {"audio_url": "/audio/final.mp3"},
+        },
+    }
+    result = await node.execute(state)
+    assert result["node_outputs"]["end"]["outputs"]["audio_url"] == "/audio/final.mp3"
+    assert result["node_outputs"]["end"]["outputs"]["title"] == "今天的 AI 播客"
+    assert result["node_outputs"]["end"]["answer"] == "🎧 今天的 AI 播客 已生成，链接：/audio/final.mp3"
+    assert result["answer"] == "🎧 今天的 AI 播客 已生成，链接：/audio/final.mp3"
+    assert result["outputs"]["audio_url"] == "/audio/final.mp3"
 
 
 @pytest.mark.asyncio
@@ -118,8 +142,8 @@ async def test_end_node_omitted_node_outputs():
         "llm_output": "generated text", "audio_url": "/audio/test.mp3",
     }
     result = await node.execute(state)
-    assert result["node_outputs"]["end"]["llm_output"] == "generated text"
-    assert result["node_outputs"]["end"]["audio_url"] == "/audio/test.mp3"
+    assert result["node_outputs"]["end"]["outputs"] == {}
+    assert result["node_outputs"]["end"]["answer"] == ""
 
 
 @pytest.mark.asyncio
@@ -331,8 +355,8 @@ async def test_rag_node_retrieves_context():
         result = await node.execute(state)
         assert "AI is transforming" in result["context"]
         assert "Personalized learning" in result["context"]
-        assert result["node_outputs"]["rag"]["retrieved_docs"] == 2
-        assert "AI is transforming" in result["node_outputs"]["rag"]["context_preview"]
+        assert len(result["node_outputs"]["rag"]["documents"]) == 2
+        assert "AI is transforming" in result["node_outputs"]["rag"]["context"]
 
 
 @pytest.mark.asyncio
@@ -351,7 +375,7 @@ async def test_rag_node_preserves_context_when_no_docs():
         }
         result = await node.execute(state)
         assert result["context"] == "existing context"
-        assert result["node_outputs"]["rag"]["retrieved_docs"] == 0
+        assert len(result["node_outputs"]["rag"]["documents"]) == 0
 
 
 @pytest.mark.asyncio
@@ -377,5 +401,5 @@ async def test_agent_node_executes():
         }
         result = await node.execute(state)
         assert result["llm_output"] == "Agent completed the task. Here's the podcast script."
-        assert result["node_outputs"]["agent"]["output"] == "Agent completed the task. Here's the podcast script."
-        assert result["node_outputs"]["agent"]["total_messages"] == 1
+        assert result["node_outputs"]["agent"]["text"] == "Agent completed the task. Here's the podcast script."
+        assert result["node_outputs"]["agent"]["steps"] == []

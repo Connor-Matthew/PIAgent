@@ -15,6 +15,10 @@ class BaseNode(ABC):
     def __init__(self, config: dict[str, Any] | None = None):
         self.config = config or {}
 
+    @property
+    def node_id(self) -> str:
+        return self.config.get("id", self.node_type)
+
     @abstractmethod
     async def execute(self, state: WorkflowState, **kwargs) -> WorkflowState:
         ...

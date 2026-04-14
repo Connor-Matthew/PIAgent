@@ -31,10 +31,14 @@ class TTSNode(BaseNode):
             output_dir=settings.audio_dir,
         )
 
+        # Rough duration estimate (~5 chars per second)
+        duration = round(len(text) * 0.2, 1) if text else 0.0
+
         state["audio_url"] = audio_url
         state.setdefault("node_outputs", {})
-        state["node_outputs"][self.config.get("id", "tts")] = {
+        state["node_outputs"][self.node_id] = {
             "audio_url": audio_url,
+            "duration": duration,
         }
 
         return state

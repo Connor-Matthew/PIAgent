@@ -28,7 +28,8 @@ class WorkflowUpdate(BaseModel):
 
 
 class RunCreate(BaseModel):
-    input: str
+    inputs: dict | None = None
+    input: str | None = None
 
 
 # --- CRUD ---
@@ -116,7 +117,16 @@ async def run_workflow(workflow_id: str, body: RunCreate, db: Session = Depends(
     if not wf:
         raise HTTPException(status_code=404, detail="Workflow not found")
 
-    run = WorkflowRun(workflow_id=wf.id, input_text=body.input, status="running")
+    inputs = body.inputs or {}
+    user_input = body.input or inputs.get("input", "")
+
+    # Persist run input: prefer JSON-serialized inputs, fall back to plain input text
+    if body.inputs is not None:
+        run_input_text = json.dumps(body.inputs, ensure_ascii=False)
+    else:
+        run_input_text = user_input
+
+    run = WorkflowRun(workflow_id=wf.id, input_text=run_input_text, status="running")
     await run_in_threadpool(lambda: db.add(run))
     await run_in_threadpool(lambda: db.commit())
     await run_in_threadpool(lambda: db.refresh(run))
@@ -124,7 +134,7 @@ async def run_workflow(workflow_id: str, body: RunCreate, db: Session = Depends(
     engine = ExecutionEngine()
     start = time.time()
     try:
-        result = await engine.run(wf.graph, user_input=body.input)
+        result = await engine.run(wf.graph, user_input=user_input, inputs=inputs)
     except Exception as exc:
         duration = round(time.time() - start, 3)
         run.status = "failed"
@@ -153,6 +163,19 @@ async def stream_run_events(workflow_id: str, run_id: str, db: Session = Depends
     if not run or run.workflow_id != workflow_id:
         raise HTTPException(status_code=404, detail="Run not found")
 
+    # Decode persisted input
+    try:
+        parsed = json.loads(run.input_text)
+        if isinstance(parsed, dict):
+            inputs = parsed
+            user_input = inputs.get("input", "")
+        else:
+            inputs = {}
+            user_input = run.input_text or ""
+    except (json.JSONDecodeError, TypeError):
+        inputs = {}
+        user_input = run.input_text or ""
+
     async def event_generator():
         queue: asyncio.Queue = asyncio.Queue()
 
@@ -163,7 +186,7 @@ async def stream_run_events(workflow_id: str, run_id: str, db: Session = Depends
 
         async def execute():
             try:
-                result = await engine.run(wf.graph, user_input=run.input_text, on_event=on_event)
+                result = await engine.run(wf.graph, user_input=user_input, inputs=inputs, on_event=on_event)
             except Exception as exc:
                 await queue.put({"type": "workflow_end", "status": "failed", "error": str(exc)})
             finally:

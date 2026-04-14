@@ -1,4 +1,4 @@
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage, AIMessage, ToolMessage
 from langchain_core.tools import tool
 from langgraph.prebuilt import create_react_agent
 
@@ -65,13 +65,38 @@ class AgentNode(BaseNode):
         result = await agent.ainvoke({"messages": input_messages})
 
         # Extract the last AI message as output
-        last_message = result["messages"][-1]
+        result_messages = result.get("messages", [])
+        last_message = result_messages[-1]
         state["llm_output"] = last_message.content
-        state["messages"] = result["messages"]
+        state["messages"] = result_messages
+
+        # Build steps from message history
+        steps = []
+        for msg in result_messages:
+            if isinstance(msg, AIMessage) and msg.tool_calls:
+                steps.append({
+                    "type": "action",
+                    "tool_calls": [
+                        {"name": tc.get("name"), "args": tc.get("args")}
+                        for tc in msg.tool_calls
+                    ],
+                })
+            elif isinstance(msg, ToolMessage):
+                steps.append({
+                    "type": "observation",
+                    "tool_name": msg.name,
+                    "content": msg.content,
+                })
+            elif isinstance(msg, AIMessage) and msg.content:
+                steps.append({
+                    "type": "thought",
+                    "content": msg.content,
+                })
+
         state.setdefault("node_outputs", {})
-        state["node_outputs"][self.config.get("id", "agent")] = {
-            "output": last_message.content,
-            "total_messages": len(result["messages"]),
+        state["node_outputs"][self.node_id] = {
+            "text": last_message.content,
+            "steps": steps,
         }
 
         return state

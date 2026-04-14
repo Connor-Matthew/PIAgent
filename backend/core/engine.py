@@ -1,5 +1,5 @@
 import time
-from typing import Callable, Awaitable
+from typing import Callable, Awaitable, Any
 
 from backend.core.compiler import GraphCompiler
 from backend.core.state import WorkflowState
@@ -13,7 +13,8 @@ class ExecutionEngine:
     async def run(
         self,
         graph_json: dict,
-        user_input: str,
+        user_input: str = "",
+        inputs: dict[str, Any] | None = None,
         on_event: Callable[[dict], Awaitable[None]] | None = None,
     ) -> WorkflowState:
         """Execute a workflow graph and emit events for each node.
@@ -26,7 +27,7 @@ class ExecutionEngine:
           node_type, status ("completed" or "failed"), duration (seconds),
           output, and error (if failed).
         - workflow_end: Emitted after all nodes finish or when a node fails.
-          Contains status ("completed" or "failed") and duration.
+          Contains status ("completed" or "failed"), duration, answer, and outputs.
         """
 
         order = self.compiler.topological_sort(graph_json)
@@ -35,6 +36,7 @@ class ExecutionEngine:
         # Initialize state
         state: WorkflowState = {
             "input": user_input,
+            "inputs": inputs or {},
             "messages": [],
             "context": "",
             "llm_output": "",
@@ -105,6 +107,8 @@ class ExecutionEngine:
                 "type": "workflow_end",
                 "status": "completed",
                 "duration": total_duration,
+                "answer": state.get("answer", ""),
+                "outputs": state.get("outputs", {}),
             })
 
         return state
