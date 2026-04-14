@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     deepseek_api_key: SecretStr = ""
     fish_audio_api_key: SecretStr = ""
     chroma_dir: str = "./chroma_data"
+    upload_dir: str = "./uploads"
     cors_origins: list[str] = ["http://localhost:5173"]
 
     class Config:
