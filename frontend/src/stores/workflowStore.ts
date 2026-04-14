@@ -9,7 +9,7 @@ import {
   applyEdgeChanges,
   addEdge,
 } from 'reactflow'
-import type { WorkflowNodeData } from '../types/workflow'
+import type { WorkflowNodeData, WorkflowGraph } from '../types/workflow'
 
 interface WorkflowState {
   nodes: Node<WorkflowNodeData>[]
@@ -25,7 +25,7 @@ interface WorkflowState {
   setSelectedNode: (id: string | null) => void
   updateNodeData: (id: string, data: Partial<WorkflowNodeData>) => void
   setWorkflow: (id: string, name: string, nodes: Node<WorkflowNodeData>[], edges: Edge[]) => void
-  toGraphJSON: () => { nodes: unknown[]; edges: unknown[] }
+  toGraphJSON: () => WorkflowGraph
 }
 
 export const useWorkflowStore = create<WorkflowState>((set, get) => ({
