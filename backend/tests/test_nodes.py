@@ -210,6 +210,23 @@ async def test_llm_node_preserves_message_history():
         assert len(result["messages"]) == 3  # existing + HumanMessage + response
 
 
+def test_agent_node_unknown_provider_raises():
+    from backend.nodes.agent_node import AgentNode
+
+    node = AgentNode(config={"provider": "unknown_provider"})
+    with pytest.raises(ValueError, match="Unknown provider"):
+        node._build_agent()
+
+
+def test_agent_node_unknown_tool_raises():
+    from backend.nodes.agent_node import AgentNode
+
+    with patch("backend.nodes.agent_node.PROVIDERS", {"openai": MagicMock()}):
+        node = AgentNode(config={"provider": "openai", "tools": ["unknown_tool"]})
+        with pytest.raises(ValueError, match="Unknown tool"):
+            node._build_agent()
+
+
 def test_llm_node_unknown_provider_raises():
     from backend.nodes.llm_node import LLMNode
 
@@ -359,4 +376,6 @@ async def test_agent_node_executes():
             "llm_output": "", "audio_url": "", "node_outputs": {},
         }
         result = await node.execute(state)
-        assert result["llm_output"] != ""
+        assert result["llm_output"] == "Agent completed the task. Here's the podcast script."
+        assert result["node_outputs"]["agent"]["output"] == "Agent completed the task. Here's the podcast script."
+        assert result["node_outputs"]["agent"]["total_messages"] == 1

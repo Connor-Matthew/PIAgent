@@ -43,7 +43,11 @@ class AgentNode(BaseNode):
         llm = provider().get_chat_model(model=model_name, temperature=temperature, streaming=True)
 
         tool_names = self.config.get("tools", [])
-        tools = [AVAILABLE_TOOLS[t] for t in tool_names if t in AVAILABLE_TOOLS]
+        tools = []
+        for t in tool_names:
+            if t not in AVAILABLE_TOOLS:
+                raise ValueError(f"Unknown tool: {t}")
+            tools.append(AVAILABLE_TOOLS[t])
 
         system_prompt = self.config.get("system_prompt", "You are a helpful AI agent.")
 
@@ -52,7 +56,9 @@ class AgentNode(BaseNode):
     async def execute(self, state: WorkflowState, **kwargs) -> WorkflowState:
         agent = self._build_agent()
 
-        input_messages = [HumanMessage(content=state.get("input", ""))]
+        messages = state.get("messages", [])
+        input_messages = list(messages)
+        input_messages.append(HumanMessage(content=state.get("input", "")))
         if state.get("context"):
             input_messages.insert(0, SystemMessage(content=f"Context:\n{state['context']}"))
 
