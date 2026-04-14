@@ -16,7 +16,7 @@ router = APIRouter(prefix="/api/knowledge-bases", tags=["knowledge"])
 
 
 class KBCreate(BaseModel):
-    name: str
+    name: str = Field(..., min_length=1, max_length=255)
     description: str = ""
 
 
@@ -75,6 +75,7 @@ def upload_doc(kb_id: str, file: UploadFile = File(...), db: Session = Depends(g
     if not kb:
         raise HTTPException(status_code=404, detail="Knowledge base not found")
 
+    os.makedirs(settings.upload_dir, exist_ok=True)
     ext = os.path.splitext(file.filename or "")[1]
     allowed_exts = {".txt", ".pdf", ".md"}
     if ext.lower() not in allowed_exts:
@@ -87,31 +88,30 @@ def upload_doc(kb_id: str, file: UploadFile = File(...), db: Session = Depends(g
     if size > MAX_SIZE:
         raise HTTPException(status_code=413, detail="File too large")
 
-    os.makedirs(settings.upload_dir, exist_ok=True)
     safe_filename = f"{uuid.uuid4().hex}{ext}"
     file_path = os.path.join(settings.upload_dir, safe_filename)
-    with open(file_path, "wb") as f:
-        shutil.copyfileobj(file.file, f)
 
+    docs = []
     try:
+        with open(file_path, "wb") as f:
+            shutil.copyfileobj(file.file, f)
+
         docs = load_and_split(file_path)
         vectorstore = get_vectorstore(collection_name=kb_id)
         vectorstore.add_documents(docs)
+
+        db.execute(
+            update(KnowledgeBase)
+            .where(KnowledgeBase.id == kb_id)
+            .values(doc_count=KnowledgeBase.doc_count + len(docs))
+        )
+        db.commit()
     except Exception:
         if os.path.exists(file_path):
             os.remove(file_path)
         raise
 
-    db.execute(
-        update(KnowledgeBase)
-        .where(KnowledgeBase.id == kb_id)
-        .values(doc_count=KnowledgeBase.doc_count + len(docs))
-    )
-    db.commit()
-
-    # Refresh kb to get updated doc_count
-    db.refresh(kb)
-    return {"chunks": len(docs), "doc_count": kb.doc_count}
+    return {"chunks": len(docs), "doc_count": kb.doc_count + len(docs)}
 
 
 @router.post("/{kb_id}/query")
