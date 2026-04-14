@@ -30,8 +30,10 @@ app.mount("/audio", StaticFiles(directory=settings.audio_dir), name="audio")
 
 from backend.api.workflows import router as workflows_router
 from backend.api.knowledge import router as knowledge_router
+from backend.api.providers import router as providers_router
 app.include_router(workflows_router)
 app.include_router(knowledge_router)
+app.include_router(providers_router)
 
 
 @app.get("/api/health")
