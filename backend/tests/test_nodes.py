@@ -335,3 +335,28 @@ async def test_rag_node_preserves_context_when_no_docs():
         result = await node.execute(state)
         assert result["context"] == "existing context"
         assert result["node_outputs"]["rag"]["retrieved_docs"] == 0
+
+
+@pytest.mark.asyncio
+async def test_agent_node_executes():
+    from backend.nodes.agent_node import AgentNode
+
+    with patch("backend.nodes.agent_node.AgentNode._build_agent") as mock_build:
+        mock_agent = AsyncMock()
+        mock_agent.ainvoke.return_value = {
+            "messages": [MagicMock(content="Agent completed the task. Here's the podcast script.")]
+        }
+        mock_build.return_value = mock_agent
+
+        node = AgentNode(config={
+            "provider": "openai",
+            "model": "gpt-4o",
+            "system_prompt": "You are a helpful agent.",
+            "tools": ["rag", "tts"],
+        })
+        state: WorkflowState = {
+            "input": "Make a podcast about AI", "messages": [], "context": "",
+            "llm_output": "", "audio_url": "", "node_outputs": {},
+        }
+        result = await node.execute(state)
+        assert result["llm_output"] != ""
