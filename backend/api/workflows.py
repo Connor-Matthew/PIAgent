@@ -11,6 +11,7 @@ from backend.database import get_db
 from backend.models.workflow import Workflow
 from backend.models.run import WorkflowRun
 from backend.core.engine import ExecutionEngine
+from backend.core.compiler import GraphCompiler, CompilerError, CycleDetectedError
 
 router = APIRouter(prefix="/api/workflows", tags=["workflows"])
 
@@ -32,10 +33,34 @@ class RunCreate(BaseModel):
     input: str | None = None
 
 
+def _serialize_state(state: dict) -> dict:
+    """Serialize a WorkflowState for JSON response, handling LangChain messages."""
+    result = dict(state)
+    if "messages" in result:
+        serialized_messages = []
+        for msg in result["messages"]:
+            if hasattr(msg, "model_dump"):
+                serialized_messages.append(msg.model_dump())
+            elif hasattr(msg, "dict"):
+                serialized_messages.append(msg.dict())
+            elif hasattr(msg, "content"):
+                serialized_messages.append({"type": getattr(msg, "type", "unknown"), "content": msg.content})
+            else:
+                serialized_messages.append(str(msg))
+        result["messages"] = serialized_messages
+    return result
+
+
 # --- CRUD ---
 
 @router.post("", status_code=201)
 def create_workflow(body: WorkflowCreate, db: Session = Depends(get_db)):
+    compiler = GraphCompiler()
+    try:
+        compiler.validate(body.graph, db=db)
+    except (CompilerError, ValueError, CycleDetectedError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
     wf = Workflow(name=body.name, description=body.description)
     wf.graph = body.graph
     db.add(wf)
@@ -83,6 +108,12 @@ def update_workflow(workflow_id: str, body: WorkflowUpdate, db: Session = Depend
     wf = db.query(Workflow).filter(Workflow.id == workflow_id).first()
     if not wf:
         raise HTTPException(status_code=404, detail="Workflow not found")
+    if body.graph is not None:
+        compiler = GraphCompiler()
+        try:
+            compiler.validate(body.graph, db=db)
+        except (CompilerError, ValueError, CycleDetectedError) as e:
+            raise HTTPException(status_code=400, detail=str(e))
     if body.name is not None:
         wf.name = body.name
     if body.description is not None:
@@ -117,8 +148,14 @@ async def run_workflow(workflow_id: str, body: RunCreate, db: Session = Depends(
     if not wf:
         raise HTTPException(status_code=404, detail="Workflow not found")
 
+    compiler = GraphCompiler()
+    try:
+        compiler.validate(wf.graph, db=db)
+    except (CompilerError, ValueError, CycleDetectedError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
     inputs = body.inputs or {}
-    user_input = body.input or inputs.get("input", "")
+    user_input = body.input if body.input is not None else inputs.get("input", "")
 
     # Persist run input: prefer JSON-serialized inputs, fall back to plain input text
     if body.inputs is not None:
@@ -130,26 +167,13 @@ async def run_workflow(workflow_id: str, body: RunCreate, db: Session = Depends(
     await run_in_threadpool(lambda: db.add(run))
     await run_in_threadpool(lambda: db.commit())
     await run_in_threadpool(lambda: db.refresh(run))
-
-    engine = ExecutionEngine()
-    start = time.time()
-    try:
-        result = await engine.run(wf.graph, user_input=user_input, inputs=inputs)
-    except Exception as exc:
-        duration = round(time.time() - start, 3)
-        run.status = "failed"
-        run.output = {"error": str(exc)}
-        run.duration = duration
-        await run_in_threadpool(lambda: db.commit())
-        return {"run_id": run.id, "status": "failed", "output": run.output}
-
-    duration = round(time.time() - start, 3)
-    run.status = "completed"
-    run.output = result
-    run.duration = duration
-    await run_in_threadpool(lambda: db.commit())
-
-    return {"run_id": run.id, "status": "completed", "output": result}
+    return {
+        "run_id": run.id,
+        "status": "running",
+        "output": {},
+        "answer": "",
+        "outputs": {},
+    }
 
 
 @router.get("/{workflow_id}/runs/{run_id}/events")
@@ -159,9 +183,29 @@ async def stream_run_events(workflow_id: str, run_id: str, db: Session = Depends
     if not wf:
         raise HTTPException(status_code=404, detail="Workflow not found")
 
+    compiler = GraphCompiler()
+    try:
+        compiler.validate(wf.graph, db=db)
+    except (CompilerError, ValueError, CycleDetectedError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
     run = await run_in_threadpool(lambda: db.query(WorkflowRun).filter(WorkflowRun.id == run_id).first())
     if not run or run.workflow_id != workflow_id:
         raise HTTPException(status_code=404, detail="Run not found")
+
+    if run.status in {"completed", "failed"}:
+        payload = {
+            "type": "workflow_end",
+            "status": run.status,
+            "duration": run.duration,
+            "answer": run.output.get("answer", ""),
+            "outputs": run.output.get("outputs", {}),
+        }
+
+        async def replay_generator():
+            yield f"event: workflow_end\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+        return StreamingResponse(replay_generator(), media_type="text/event-stream")
 
     # Decode persisted input
     try:
@@ -185,10 +229,21 @@ async def stream_run_events(workflow_id: str, run_id: str, db: Session = Depends
         engine = ExecutionEngine()
 
         async def execute():
+            run.status = "running"
+            await run_in_threadpool(lambda: db.commit())
+            started_at = time.time()
             try:
                 result = await engine.run(wf.graph, user_input=user_input, inputs=inputs, on_event=on_event)
+                serializable_result = _serialize_state(result)
+                run.status = "completed"
+                run.output = serializable_result
+                run.duration = round(time.time() - started_at, 3)
+                await run_in_threadpool(lambda: db.commit())
             except Exception as exc:
-                await queue.put({"type": "workflow_end", "status": "failed", "error": str(exc)})
+                run.status = "failed"
+                run.output = {"error": str(exc)}
+                run.duration = round(time.time() - started_at, 3)
+                await run_in_threadpool(lambda: db.commit())
             finally:
                 await queue.put(None)
 

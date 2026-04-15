@@ -147,6 +147,39 @@ async def test_end_node_omitted_node_outputs():
 
 
 @pytest.mark.asyncio
+async def test_start_node_missing_required_raises():
+    node = StartNode(config={
+        "inputs": [{"name": "topic", "type": "text", "required": True}]
+    })
+    state: WorkflowState = {
+        "input": "", "messages": [], "context": "",
+        "llm_output": "", "audio_url": "", "node_outputs": {},
+    }
+    with pytest.raises(ValueError, match="Missing required input field"):
+        await node.execute(state, inputs={})
+
+
+@pytest.mark.asyncio
+async def test_end_node_answer_with_direct_reference():
+    """End node answer template can directly reference upstream node outputs."""
+    node = EndNode(config={
+        "outputs": [
+            {"name": "audio_url", "source": "reference", "value": "{{tts_1.audio_url}}"},
+        ],
+        "answer": "Direct: {{tts_1.audio_url}} / Local: {{audio_url}}",
+    })
+    state: WorkflowState = {
+        "input": "test", "messages": [], "context": "",
+        "llm_output": "generated text", "audio_url": "",
+        "node_outputs": {
+            "tts_1": {"audio_url": "/audio/direct.mp3"},
+        },
+    }
+    result = await node.execute(state)
+    assert result["answer"] == "Direct: /audio/direct.mp3 / Local: /audio/direct.mp3"
+
+
+@pytest.mark.asyncio
 async def test_llm_node_generates_output():
     from backend.nodes.llm_node import LLMNode
 
@@ -159,7 +192,7 @@ async def test_llm_node_generates_output():
         mock_get.return_value = mock_model
 
         node = LLMNode(config={
-            "provider": "openai",
+            "provider_id": 1,
             "model": "gpt-4o",
             "temperature": 0.7,
             "system_prompt": "You are a podcast writer.",
@@ -189,7 +222,7 @@ async def test_llm_node_with_rag_context():
         mock_model.ainvoke.return_value = mock_response
         mock_get.return_value = mock_model
 
-        node = LLMNode(config={})
+        node = LLMNode(config={"provider_id": 1})
         state: WorkflowState = {
             "input": "What is RAG?",
             "messages": [],
@@ -219,7 +252,7 @@ async def test_llm_node_preserves_message_history():
         mock_model.ainvoke.return_value = mock_response
         mock_get.return_value = mock_model
 
-        node = LLMNode(config={})
+        node = LLMNode(config={"provider_id": 1})
         existing_message = AIMessage(content="First response.")
         state: WorkflowState = {
             "input": "Follow up",
@@ -234,28 +267,70 @@ async def test_llm_node_preserves_message_history():
         assert len(result["messages"]) == 3  # existing + HumanMessage + response
 
 
-def test_agent_node_unknown_provider_raises():
+@pytest.mark.asyncio
+async def test_llm_node_emits_stream_events():
+    from backend.nodes.llm_node import LLMNode
+    from langchain_core.messages import AIMessageChunk
+
+    class StreamingChatModel:
+        async def astream(self, messages):
+            for token in ["你好", "，世界"]:
+                yield AIMessageChunk(content=token)
+
+        async def ainvoke(self, messages):
+            raise AssertionError("ainvoke should not be used when streaming succeeds")
+
+    events = []
+
+    async def on_event(event):
+        events.append(event)
+
+    with patch("backend.nodes.llm_node.LLMNode._get_chat_model", return_value=StreamingChatModel()):
+        node = LLMNode(config={"provider_id": 1, "id": "llm_1"})
+        state: WorkflowState = {
+            "input": "Say hello",
+            "messages": [],
+            "context": "",
+            "llm_output": "",
+            "audio_url": "",
+            "node_outputs": {},
+        }
+        result = await node.execute(state, on_event=on_event)
+
+    assert [event["delta"] for event in events] == ["你好", "，世界"]
+    assert result["llm_output"] == "你好，世界"
+    assert result["node_outputs"]["llm_1"]["text"] == "你好，世界"
+
+
+def test_agent_node_missing_provider_id_raises():
     from backend.nodes.agent_node import AgentNode
 
-    node = AgentNode(config={"provider": "unknown_provider"})
-    with pytest.raises(ValueError, match="Unknown provider"):
+    node = AgentNode(config={})
+    with pytest.raises(ValueError, match="provider_id is required"):
         node._build_agent()
 
 
 def test_agent_node_unknown_tool_raises():
     from backend.nodes.agent_node import AgentNode
 
-    with patch("backend.nodes.agent_node.PROVIDERS", {"openai": MagicMock()}):
-        node = AgentNode(config={"provider": "openai", "tools": ["unknown_tool"]})
-        with pytest.raises(ValueError, match="Unknown tool"):
-            node._build_agent()
+    mock_row = MagicMock()
+    mock_row.enabled = True
+    mock_session = MagicMock()
+    mock_session.query.return_value.filter.return_value.first.return_value = mock_row
+
+    with patch("backend.nodes.agent_node.SessionLocal", return_value=mock_session):
+        with patch("backend.nodes.agent_node.build_provider") as mock_build:
+            mock_build.return_value = MagicMock()
+            node = AgentNode(config={"provider_id": 1, "tools": ["unknown_tool"]})
+            with pytest.raises(ValueError, match="Unknown tool"):
+                node._build_agent()
 
 
-def test_llm_node_unknown_provider_raises():
+def test_llm_node_missing_provider_id_raises():
     from backend.nodes.llm_node import LLMNode
 
-    node = LLMNode(config={"provider": "unknown_provider"})
-    with pytest.raises(ValueError, match="Unknown provider"):
+    node = LLMNode(config={})
+    with pytest.raises(ValueError, match="provider_id is required"):
         node._get_chat_model()
 
 
@@ -268,7 +343,7 @@ async def test_tts_node_generates_audio_url():
         mock_provider.synthesize.return_value = "/audio/test123.mp3"
         mock_get.return_value = mock_provider
 
-        node = TTSNode(config={"provider": "fish_audio", "voice": "default"})
+        node = TTSNode(config={"provider_id": 1, "voice_id": "default"})
         state: WorkflowState = {
             "input": "test", "messages": [], "context": "",
             "llm_output": "Hello, welcome to the podcast.",
@@ -278,11 +353,11 @@ async def test_tts_node_generates_audio_url():
         assert result["audio_url"].endswith(".mp3")
 
 
-def test_tts_node_unknown_provider_raises():
+def test_tts_node_missing_provider_id_raises():
     from backend.nodes.tts_node import TTSNode
 
-    node = TTSNode(config={"provider": "unknown_provider"})
-    with pytest.raises(ValueError, match="Unknown TTS provider"):
+    node = TTSNode(config={})
+    with pytest.raises(ValueError, match="provider_id is required"):
         node._get_tts_provider()
 
 
@@ -295,7 +370,7 @@ async def test_tts_node_fallback_to_input():
         mock_provider.synthesize.return_value = "/audio/fallback.mp3"
         mock_get.return_value = mock_provider
 
-        node = TTSNode(config={"provider": "fish_audio", "voice": "default"})
+        node = TTSNode(config={"provider_id": 1, "voice_id": "default"})
         state: WorkflowState = {
             "input": "Fallback text",
             "messages": [],
@@ -321,7 +396,7 @@ async def test_tts_node_populates_node_outputs():
         mock_provider.synthesize.return_value = "/audio/output.mp3"
         mock_get.return_value = mock_provider
 
-        node = TTSNode(config={"provider": "fish_audio", "voice": "default", "id": "tts_1"})
+        node = TTSNode(config={"provider_id": 1, "voice_id": "default", "id": "tts_1"})
         state: WorkflowState = {
             "input": "test",
             "messages": [],
@@ -360,7 +435,7 @@ async def test_rag_node_retrieves_context():
 
 
 @pytest.mark.asyncio
-async def test_rag_node_preserves_context_when_no_docs():
+async def test_rag_node_clears_context_when_no_docs():
     from backend.nodes.rag_node import RAGNode
 
     with patch("backend.nodes.rag_node.RAGNode._get_retriever") as mock_get:
@@ -374,7 +449,7 @@ async def test_rag_node_preserves_context_when_no_docs():
             "llm_output": "", "audio_url": "", "node_outputs": {},
         }
         result = await node.execute(state)
-        assert result["context"] == "existing context"
+        assert result["context"] == ""
         assert len(result["node_outputs"]["rag"]["documents"]) == 0
 
 
@@ -390,7 +465,7 @@ async def test_agent_node_executes():
         mock_build.return_value = mock_agent
 
         node = AgentNode(config={
-            "provider": "openai",
+            "provider_id": 1,
             "model": "gpt-4o",
             "system_prompt": "You are a helpful agent.",
             "tools": ["rag", "tts"],

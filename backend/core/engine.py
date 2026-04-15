@@ -70,7 +70,7 @@ class ExecutionEngine:
             node_start = time.time()
             duration = 0.0
             try:
-                state = await node_instance.execute(state, user_input=user_input)
+                state = await node_instance.execute(state, user_input=user_input, on_event=on_event)
             except Exception as exc:
                 duration = round(time.time() - node_start, 3)
                 if on_event:
@@ -86,6 +86,8 @@ class ExecutionEngine:
                         "type": "workflow_end",
                         "status": "failed",
                         "duration": round(time.time() - workflow_start, 3),
+                        "answer": state.get("answer", ""),
+                        "outputs": state.get("outputs", {}),
                     })
                 raise
             else:

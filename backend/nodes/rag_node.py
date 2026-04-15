@@ -15,12 +15,13 @@ class RAGNode(BaseNode):
     async def execute(self, state: WorkflowState, **kwargs) -> WorkflowState:
         query = state.get("input", "")
         retriever = self._get_retriever()
+        on_event = kwargs.get("on_event")
 
-        docs = await retriever.ainvoke(query)
+        async with self.heartbeat(on_event, message="检索知识库中..."):
+            docs = await retriever.ainvoke(query)
         context = "\n\n".join(doc.page_content for doc in docs)
 
-        if docs:
-            state["context"] = context
+        state["context"] = context
         state.setdefault("node_outputs", {})
         state["node_outputs"][self.node_id] = {
             "context": context,

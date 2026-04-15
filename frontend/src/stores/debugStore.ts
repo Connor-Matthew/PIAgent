@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { NodeExecutionState, SSEEvent } from '../types/workflow'
+import type { NodeExecutionState, SSEEvent, StreamProgressDelta } from '../types/workflow'
 
 type DebugMode = 'simple' | 'detailed'
 
@@ -8,13 +8,18 @@ interface DebugState {
   mode: DebugMode
   isRunning: boolean
   inputText: string
+  runInputs: Record<string, unknown>
   nodeStates: Map<string, NodeExecutionState>
   audioUrl: string | null
   totalDuration: number | null
+  finalAnswer: string | null
+  finalOutputs: Record<string, unknown> | null
 
   toggleDrawer: () => void
   setMode: (mode: DebugMode) => void
   setInputText: (text: string) => void
+  setRunInput: (name: string, value: unknown) => void
+  setRunInputs: (inputs: Record<string, unknown>) => void
   startRun: () => void
   handleSSEEvent: (event: SSEEvent) => void
   reset: () => void
@@ -25,9 +30,12 @@ export const useDebugStore = create<DebugState>((set, get) => ({
   mode: 'detailed',
   isRunning: false,
   inputText: '',
+  runInputs: {},
   nodeStates: new Map(),
   audioUrl: null,
   totalDuration: null,
+  finalAnswer: null,
+  finalOutputs: null,
 
   toggleDrawer: () => set({ isOpen: !get().isOpen }),
 
@@ -35,8 +43,20 @@ export const useDebugStore = create<DebugState>((set, get) => ({
 
   setInputText: (text) => set({ inputText: text }),
 
+  setRunInput: (name, value) =>
+    set({ runInputs: { ...get().runInputs, [name]: value } }),
+
+  setRunInputs: (inputs) => set({ runInputs: inputs }),
+
   startRun: () =>
-    set({ isRunning: true, nodeStates: new Map(), audioUrl: null, totalDuration: null }),
+    set({
+      isRunning: true,
+      nodeStates: new Map(),
+      audioUrl: null,
+      totalDuration: null,
+      finalAnswer: null,
+      finalOutputs: null,
+    }),
 
   handleSSEEvent: (event) => {
     const states = new Map(get().nodeStates)
@@ -44,6 +64,7 @@ export const useDebugStore = create<DebugState>((set, get) => ({
     if (event.type === 'node_start' && event.node_id) {
       states.set(event.node_id, {
         nodeId: event.node_id,
+        nodeType: event.node_type,
         status: 'running',
         chunks: [],
       })
@@ -51,35 +72,94 @@ export const useDebugStore = create<DebugState>((set, get) => ({
     }
 
     if (event.type === 'node_stream' && event.node_id) {
-      const existing = states.get(event.node_id)
-      if (existing && event.chunk) {
-        existing.chunks.push(event.chunk)
-        states.set(event.node_id, { ...existing })
-        set({ nodeStates: states })
+      const existing = states.get(event.node_id) ?? {
+        nodeId: event.node_id,
+        nodeType: event.node_type,
+        status: 'running' as const,
+        chunks: [],
       }
+
+      if (typeof event.seq === 'number' && typeof existing.lastSeq === 'number' && event.seq <= existing.lastSeq) {
+        return
+      }
+
+      if (typeof event.delta === 'string' && event.delta) {
+        existing.chunks.push(event.delta)
+      } else if (event.delta && typeof event.delta === 'object') {
+        const progress = event.delta as StreamProgressDelta
+        existing.progressLabel = progress.message ?? `${progress.current}/${progress.total}`
+      }
+
+      if (typeof event.seq === 'number') {
+        existing.lastSeq = event.seq
+      }
+
+      states.set(event.node_id, { ...existing })
+      set({ nodeStates: states })
+    }
+
+    if (event.type === 'node_heartbeat' && event.node_id) {
+      const existing = states.get(event.node_id) ?? {
+        nodeId: event.node_id,
+        nodeType: event.node_type,
+        status: 'running' as const,
+        chunks: [],
+      }
+      existing.heartbeatElapsed = event.elapsed
+      existing.heartbeatMessage = event.message
+      states.set(event.node_id, { ...existing })
+      set({ nodeStates: states })
     }
 
     if (event.type === 'node_end' && event.node_id) {
-      const existing = states.get(event.node_id)
-      if (existing) {
-        existing.status = event.status === 'failed' ? 'failed' : 'completed'
-        existing.duration = event.duration
-        if (event.output?.audio_url) {
-          set({ audioUrl: event.output.audio_url as string })
-        }
-        if (event.output?.output) {
-          existing.output = String(event.output.output)
-        }
-        states.set(event.node_id, { ...existing })
-        set({ nodeStates: states })
+      const existing = states.get(event.node_id) ?? {
+        nodeId: event.node_id,
+        nodeType: event.node_type,
+        status: 'running' as const,
+        chunks: [],
       }
+      existing.status = event.status === 'failed' ? 'failed' : 'completed'
+      existing.duration = event.duration
+      existing.heartbeatElapsed = undefined
+      existing.heartbeatMessage = undefined
+      const output = event.output || {}
+      if (output.audio_url) {
+        set({ audioUrl: output.audio_url as string })
+      }
+      if (output.text) {
+        existing.output = String(output.text)
+      } else if (output.context) {
+        existing.output = String(output.context)
+      } else if (output.audio_url) {
+        existing.output = `audio: ${output.audio_url}`
+      } else if (output.answer) {
+        existing.output = String(output.answer)
+      }
+      states.set(event.node_id, { ...existing })
+      set({ nodeStates: states })
     }
 
     if (event.type === 'workflow_end') {
-      set({ isRunning: false, totalDuration: event.duration ?? null })
+      set({
+        isRunning: false,
+        totalDuration: event.duration ?? null,
+        finalAnswer: event.answer ?? null,
+        finalOutputs: event.outputs ?? null,
+      })
+      // Also derive audio_url from final outputs if present
+      if (event.outputs?.audio_url) {
+        set({ audioUrl: event.outputs.audio_url as string })
+      }
     }
   },
 
   reset: () =>
-    set({ isRunning: false, nodeStates: new Map(), audioUrl: null, totalDuration: null }),
+    set({
+      isRunning: false,
+      nodeStates: new Map(),
+      audioUrl: null,
+      totalDuration: null,
+      finalAnswer: null,
+      finalOutputs: null,
+    }),
 }))

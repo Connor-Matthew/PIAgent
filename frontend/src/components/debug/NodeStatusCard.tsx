@@ -35,14 +35,30 @@ export function NodeStatusCard({ state }: { state: NodeExecutionState }) {
               streaming
             </span>
           )}
+          {state.status === 'running' && state.progressLabel && (
+            <span className="bg-blue-500/20 text-blue-300 text-[10px] px-1.5 py-0.5 rounded">
+              {state.progressLabel}
+            </span>
+          )}
         </div>
         {state.duration && (
           <span className="text-slate-600 text-xs">{state.duration}s</span>
         )}
       </div>
+      {state.heartbeatMessage && (
+        <div className="text-[11px] text-slate-400 mb-1">
+          {state.heartbeatMessage}
+          {typeof state.heartbeatElapsed === 'number' ? ` (${state.heartbeatElapsed}s)` : ''}
+        </div>
+      )}
       {state.chunks.length > 0 && (
         <div className="text-xs text-purple-300 bg-slate-800 rounded p-2 mt-1 max-h-16 overflow-hidden">
           {state.chunks.join('')}
+        </div>
+      )}
+      {state.output && (
+        <div className="text-xs text-slate-400 bg-slate-900 rounded p-2 mt-1 max-h-24 overflow-auto whitespace-pre-wrap">
+          {state.output}
         </div>
       )}
     </div>

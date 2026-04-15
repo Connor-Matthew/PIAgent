@@ -1,5 +1,3 @@
-import os
-import uuid
 import httpx
 
 from backend.tts.base import BaseTTSProvider
@@ -13,11 +11,7 @@ class FishAudioProvider(BaseTTSProvider):
         self.api_key = api_key or (settings.fish_audio_api_key.get_secret_value() if settings.fish_audio_api_key else "")
         self.base_url = base_url
 
-    async def synthesize(self, text: str, voice: str = "default", output_dir: str = "./audio_files") -> str:
-        os.makedirs(output_dir, exist_ok=True)
-        filename = f"{uuid.uuid4().hex}.mp3"
-        filepath = os.path.join(output_dir, filename)
-
+    async def synthesize_bytes(self, text: str, voice: str = "default", **kwargs) -> bytes:
         # Fish Audio TTS API call
         async with httpx.AsyncClient() as client:
             resp = await client.post(
@@ -27,7 +21,20 @@ class FishAudioProvider(BaseTTSProvider):
                 timeout=60.0,
             )
             resp.raise_for_status()
-            with open(filepath, "wb") as f:
-                f.write(resp.content)
+            return resp.content
 
-        return f"/audio/{filename}"
+    def test_connection(self) -> None:
+        """Send a minimal synthesis request to verify the key."""
+        import asyncio
+
+        async def _test():
+            async with httpx.AsyncClient() as client:
+                resp = await client.post(
+                    f"{self.base_url}/v1/tts",
+                    json={"text": "hi", "reference_id": "default"},
+                    headers={"Authorization": f"Bearer {self.api_key}"},
+                    timeout=30.0,
+                )
+                resp.raise_for_status()
+
+        asyncio.run(_test())

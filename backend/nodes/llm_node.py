@@ -1,34 +1,38 @@
-from langchain_core.messages import HumanMessage, SystemMessage
+import inspect
+
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from backend.nodes.base import BaseNode
 from backend.core.state import WorkflowState
-from backend.providers.openai_provider import OpenAIProvider
-from backend.providers.anthropic_provider import AnthropicProvider
-from backend.providers.google_provider import GoogleProvider
-from backend.providers.deepseek_provider import DeepSeekProvider
+from backend.providers import build_provider
+from backend.database import SessionLocal
+from backend.models.provider import Provider
 
-PROVIDERS = {
-    "openai": OpenAIProvider,
-    "anthropic": AnthropicProvider,
-    "google": GoogleProvider,
-    "deepseek": DeepSeekProvider,
-}
 
 class LLMNode(BaseNode):
     node_type = "llm"
 
     def _get_chat_model(self):
-        provider_name = self.config.get("provider", "openai")
+        provider_id = self.config.get("provider_id")
         model_name = self.config.get("model", "gpt-4o")
         temperature = self.config.get("temperature", 0.7)
         streaming = self.config.get("streaming", True)
 
-        provider_cls = PROVIDERS.get(provider_name)
-        if not provider_cls:
-            raise ValueError(f"Unknown provider: {provider_name}")
+        if not provider_id:
+            raise ValueError("provider_id is required for LLM node")
 
-        provider = provider_cls()
-        return provider.get_chat_model(
+        db = SessionLocal()
+        try:
+            row = db.query(Provider).filter(Provider.id == provider_id).first()
+            if not row:
+                raise ValueError(f"Provider not found: {provider_id}")
+            if not row.enabled:
+                raise ValueError(f"Provider is disabled: {provider_id}")
+            provider = build_provider(row)
+        finally:
+            db.close()
+
+        return provider.create_chat_model(
             model=model_name,
             temperature=temperature,
             streaming=streaming,
@@ -36,6 +40,7 @@ class LLMNode(BaseNode):
 
     async def execute(self, state: WorkflowState, **kwargs) -> WorkflowState:
         chat_model = self._get_chat_model()
+        on_event = kwargs.get("on_event")
 
         messages = []
         system_prompt = self.config.get("system_prompt", "")
@@ -49,7 +54,36 @@ class LLMNode(BaseNode):
 
         messages.append(HumanMessage(content=user_content))
 
-        response = await chat_model.ainvoke(messages)
+        streaming = bool(self.config.get("streaming", True))
+        response: AIMessage
+
+        if streaming and on_event is not None:
+            full_text = ""
+            seq = 0
+            stream = chat_model.astream(messages)
+            if inspect.isawaitable(stream):
+                stream = await stream
+            if hasattr(stream, "__aiter__"):
+                async for chunk in stream:
+                    delta = self._content_to_text(getattr(chunk, "content", ""))
+                    if not delta:
+                        continue
+                    full_text += delta
+                    seq += 1
+                    await self._emit(on_event, {
+                        "type": "node_stream",
+                        "node_id": self.node_id,
+                        "node_type": self.node_type,
+                        "delta": delta,
+                        "seq": seq,
+                    })
+
+            if full_text:
+                response = AIMessage(content=full_text)
+            else:
+                response = await chat_model.ainvoke(messages)
+        else:
+            response = await chat_model.ainvoke(messages)
 
         state.setdefault("node_outputs", {})
         state["llm_output"] = response.content

@@ -62,8 +62,10 @@ def test_run_workflow(client):
     resp = client.post(f"/api/workflows/{wf_id}/run", json={"input": "hello"})
     assert resp.status_code == 200
     data = resp.json()
-    assert data["status"] == "completed"
+    assert data["status"] == "running"
     assert "run_id" in data
+    assert data["answer"] == ""
+    assert data["outputs"] == {}
 
 
 def test_list_runs(client):
@@ -71,6 +73,9 @@ def test_list_runs(client):
     wf_id = create_resp.json()["id"]
     run_resp = client.post(f"/api/workflows/{wf_id}/run", json={"input": "hello"})
     assert run_resp.status_code == 200
+    run_id = run_resp.json()["run_id"]
+    events_resp = client.get(f"/api/workflows/{wf_id}/runs/{run_id}/events")
+    assert events_resp.status_code == 200
     resp = client.get(f"/api/workflows/{wf_id}/runs")
     assert resp.status_code == 200
     data = resp.json()
@@ -85,6 +90,11 @@ def test_stream_run_events(client):
     resp = client.get(f"/api/workflows/{wf_id}/runs/{run_id}/events")
     assert resp.status_code == 200
     assert resp.headers.get("content-type") == "text/event-stream; charset=utf-8"
+    # Verify events include answer/outputs in workflow_end
+    text = resp.text
+    assert 'event: workflow_end' in text
+    assert '"answer"' in text
+    assert '"outputs"' in text
 
 
 def test_run_workflow_with_inputs(client):
@@ -102,8 +112,40 @@ def test_run_workflow_with_inputs(client):
     resp = client.post(f"/api/workflows/{wf_id}/run", json={"inputs": {"topic": "RAG 最新进展"}})
     assert resp.status_code == 200
     data = resp.json()
-    assert data["status"] == "completed"
-    assert data["output"]["inputs"]["topic"] == "RAG 最新进展"
+    assert data["status"] == "running"
+    run_id = data["run_id"]
+    stream_resp = client.get(f"/api/workflows/{wf_id}/runs/{run_id}/events")
+    assert stream_resp.status_code == 200
 
+
+def test_create_workflow_with_cycle_returns_400(client):
+    bad_graph = {
+        "nodes": [
+            {"id": "a", "type": "start", "data": {}},
+            {"id": "b", "type": "llm", "data": {}},
+            {"id": "c", "type": "end", "data": {}},
+        ],
+        "edges": [
+            {"source": "a", "target": "b"},
+            {"source": "b", "target": "c"},
+            {"source": "c", "target": "a"},
+        ],
+    }
+    resp = client.post("/api/workflows", json={"name": "Bad", "graph": bad_graph})
+    assert resp.status_code == 400
+
+
+def test_update_workflow_with_duplicate_id_returns_400(client):
+    create_resp = client.post("/api/workflows", json={"name": "Good", "graph": SAMPLE_GRAPH})
+    wf_id = create_resp.json()["id"]
+    bad_graph = {
+        "nodes": [
+            {"id": "n1", "type": "start", "data": {}},
+            {"id": "n1", "type": "end", "data": {}},
+        ],
+        "edges": [],
+    }
+    resp = client.put(f"/api/workflows/{wf_id}", json={"graph": bad_graph})
+    assert resp.status_code == 400
 
 

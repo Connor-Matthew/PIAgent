@@ -32,7 +32,7 @@ RUN=$(curl -sf -X POST "http://localhost:5173/api/workflows/$WF_ID/run" \
   -d '{"input":"hello smoke test"}')
 RUN_ID=$(echo "$RUN" | python3 -c "import sys,json; print(json.load(sys.stdin)['run_id'])")
 STATUS=$(echo "$RUN" | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])")
-echo "   ✓ Run completed: $RUN_ID (status: $STATUS)"
+echo "   ✓ Run created: $RUN_ID (status: $STATUS)"
 
 # 6. Cleanup
 echo "6. Cleaning up..."

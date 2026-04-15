@@ -23,6 +23,7 @@ export function useSSE() {
 
       es.addEventListener('node_start', handleMessage())
       es.addEventListener('node_stream', handleMessage())
+      es.addEventListener('node_heartbeat', handleMessage())
       es.addEventListener('node_end', handleMessage())
       es.addEventListener('workflow_end', (event) => {
         const data: SSEEvent = JSON.parse(event.data)

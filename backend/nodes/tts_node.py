@@ -1,35 +1,75 @@
 from backend.nodes.base import BaseNode
 from backend.core.state import WorkflowState
-from backend.tts.base import BaseTTSProvider
-from backend.tts.fish_audio import FishAudioProvider
+from backend.tts import TTS_PROVIDER_REGISTRY, build_tts_provider
+from backend.tts.parallel import synthesize_long_text
+from backend.database import SessionLocal
+from backend.models.provider import Provider
 from backend.config import settings
-
-TTS_PROVIDERS: dict[str, type[BaseTTSProvider]] = {
-    "fish_audio": FishAudioProvider,
-}
 
 
 class TTSNode(BaseNode):
     node_type = "tts"
 
-    def _get_tts_provider(self) -> BaseTTSProvider:
-        provider_name = self.config.get("provider", "fish_audio")
-        provider_cls = TTS_PROVIDERS.get(provider_name)
-        if not provider_cls:
-            raise ValueError(f"Unknown TTS provider: {provider_name}")
-        return provider_cls()
+    def _get_tts_provider(self):
+        provider_id = self.config.get("provider_id")
+        if not provider_id:
+            raise ValueError("provider_id is required for TTS node")
+
+        db = SessionLocal()
+        try:
+            row = db.query(Provider).filter(Provider.id == provider_id).first()
+            if not row:
+                raise ValueError(f"Provider not found: {provider_id}")
+            if not row.enabled:
+                raise ValueError(f"Provider is disabled: {provider_id}")
+            provider = build_tts_provider(row)
+        finally:
+            db.close()
+
+        return provider
 
     async def execute(self, state: WorkflowState, **kwargs) -> WorkflowState:
         text = state.get("llm_output") or state.get("input", "")
+        on_event = kwargs.get("on_event")
 
         provider = self._get_tts_provider()
-        voice = self.config.get("voice", "default")
+        voice = self.config.get("voice_id", "default")
+        emotion = self.config.get("emotion", "happy")
+        speed = self.config.get("speed", 1.0)
+        max_chars = int(self.config.get("max_chars", 500))
+        max_concurrency = int(self.config.get("max_concurrency", 5))
 
-        audio_url = await provider.synthesize(
-            text=text,
-            voice=voice,
-            output_dir=settings.audio_dir,
-        )
+        progress = {"current": 0, "total": 0}
+
+        async def on_progress(progress_event: dict):
+            progress.update(progress_event)
+            await self._emit(on_event, {
+                "type": "node_stream",
+                "node_id": self.node_id,
+                "node_type": self.node_type,
+                "delta": {
+                    **progress_event,
+                    "message": f"{progress_event['current']}/{progress_event['total']} 片",
+                },
+            })
+
+        def heartbeat_message() -> str:
+            if progress["total"] > 0:
+                return f"语音合成中... {progress['current']}/{progress['total']} 片"
+            return "语音合成中..."
+
+        async with self.heartbeat(on_event, message=heartbeat_message):
+            audio_url = await synthesize_long_text(
+                provider=provider,
+                text=text,
+                voice=voice,
+                output_dir=settings.audio_dir,
+                max_chars=max_chars,
+                max_concurrency=max_concurrency,
+                on_progress=on_progress if on_event is not None else None,
+                emotion=emotion,
+                speed=speed,
+            )
 
         # Rough duration estimate (~5 chars per second)
         duration = round(len(text) * 0.2, 1) if text else 0.0
