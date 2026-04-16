@@ -1,6 +1,6 @@
-import { useRef, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useWorkflowStore } from '../../stores/workflowStore'
-import type { StartInputField, EndOutputField, NodeType } from '../../types/workflow'
+import type { EndOutputField, InputFieldType, NodeType, StartInputField } from '../../types/workflow'
 import { providerApi } from '../../services/api'
 import type { Provider } from '../../types/provider'
 
@@ -13,13 +13,16 @@ const NODE_OUTPUT_FIELDS: Record<NodeType, string[]> = {
   end: [],
 }
 
+const NODE_REFERENCE_PATTERN = /^\{\{([^\s.]+)\./
+const NODE_FIELD_REFERENCE_PATTERN = /^\{\{([^\s.]+)\.([^\s}]+)\}\}$/
+
 export function NodeConfig() {
   const { nodes, selectedNodeId, updateNodeData } = useWorkflowStore()
   const selectedNode = nodes.find((n) => n.id === selectedNodeId)
 
   if (!selectedNode) {
     return (
-      <div className="w-[280px] bg-slate-900 border-l border-slate-800 p-4 shrink-0">
+      <div className="h-full flex flex-col p-4">
         <div className="text-xs text-slate-500 uppercase tracking-wider mb-4">节点配置</div>
         <div className="text-sm text-slate-600 text-center mt-8">选择一个节点查看配置</div>
       </div>
@@ -42,7 +45,7 @@ export function NodeConfig() {
   }
 
   return (
-    <div className="w-[280px] bg-slate-900 border-l border-slate-800 p-4 shrink-0 overflow-y-auto">
+    <div className="h-full overflow-y-auto p-4">
       <div className="text-xs text-slate-500 uppercase tracking-wider mb-4">节点配置</div>
       <div className="text-sm text-slate-200 font-semibold mb-4 flex items-center gap-2">
         {data.label}
@@ -149,7 +152,7 @@ function StartNodeConfig({
               <span className="text-[10px] text-slate-400 block">类型</span>
               <select
                 value={field.type}
-                onChange={(e) => updateField(idx, { type: e.target.value as any })}
+                onChange={(e) => updateField(idx, { type: e.target.value as InputFieldType })}
                 className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200"
               >
                 <option value="text">文本</option>
@@ -285,7 +288,9 @@ function EndNodeConfig({
               <span className="text-[10px] text-slate-400 block">类型</span>
               <select
                 value={out.source}
-                onChange={(e) => updateOutput(idx, { source: e.target.value as any, value: '' })}
+                onChange={(e) =>
+                  updateOutput(idx, { source: e.target.value as EndOutputField['source'], value: '' })
+                }
                 className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200"
               >
                 <option value="input">输入（字面量）</option>
@@ -297,7 +302,7 @@ function EndNodeConfig({
             <div className="grid grid-cols-[1fr,1fr] gap-2">
               <select
                 value={(() => {
-                  const m = out.value.match(/^\{\{([^\.\s]+)\./)
+                  const m = out.value.match(NODE_REFERENCE_PATTERN)
                   return m ? m[1] : ''
                 })()}
                 onChange={(e) => {
@@ -320,11 +325,11 @@ function EndNodeConfig({
               </select>
               <select
                 value={(() => {
-                  const m = out.value.match(/^\{\{([^\.\s]+)\.([^\s\}]+)\}\}/)
+                  const m = out.value.match(NODE_FIELD_REFERENCE_PATTERN)
                   return m ? m[2] : ''
                 })()}
                 onChange={(e) => {
-                  const nodeIdMatch = out.value.match(/^\{\{([^\.\s]+)\./)
+                  const nodeIdMatch = out.value.match(NODE_REFERENCE_PATTERN)
                   const nodeId = nodeIdMatch ? nodeIdMatch[1] : ''
                   if (!nodeId) return
                   updateOutput(idx, { value: `{{${nodeId}.${e.target.value}}}` })
@@ -333,7 +338,7 @@ function EndNodeConfig({
               >
                 <option value="">选择字段</option>
                 {(() => {
-                  const nodeIdMatch = out.value.match(/^\{\{([^\.\s]+)\./)
+                  const nodeIdMatch = out.value.match(NODE_REFERENCE_PATTERN)
                   const nodeId = nodeIdMatch ? nodeIdMatch[1] : ''
                   const node = upstreamNodes.find((n) => n.id === nodeId)
                   if (!node) return null
@@ -416,7 +421,7 @@ function useProviders() {
 function useProviderModels(providerId: number | undefined) {
   const [models, setModels] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
-  const load = async (refresh = false) => {
+  const load = useCallback(async (refresh = false) => {
     if (!providerId) {
       setModels([])
       return
@@ -431,10 +436,10 @@ function useProviderModels(providerId: number | undefined) {
     } finally {
       setLoading(false)
     }
-  }
-  useEffect(() => {
-    load()
   }, [providerId])
+  useEffect(() => {
+    void load()
+  }, [load])
   return { models, loading, refresh: () => load(true) }
 }
 

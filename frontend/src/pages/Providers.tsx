@@ -1,6 +1,17 @@
 import { useEffect, useMemo, useState } from 'react'
 import { providerApi } from '../services/api'
-import type { Provider, ProviderTypeInfo } from '../types/provider'
+import type { Provider, ProviderCreate, ProviderTypeInfo, ProviderUpdate } from '../types/provider'
+import { getApiErrorMessage, getApiErrorStatus } from '../utils/apiErrors'
+
+interface ProviderFormState {
+  category: 'llm' | 'tts'
+  type: string
+  name: string
+  api_key: string
+  base_url: string
+  enabled: boolean
+  selected_models: string[]
+}
 
 export default function ProvidersPage() {
   const [providers, setProviders] = useState<Provider[]>([])
@@ -9,7 +20,7 @@ export default function ProvidersPage() {
   const [loading, setLoading] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<ProviderFormState>({
     category: 'llm' as 'llm' | 'tts',
     type: '',
     name: '',
@@ -30,8 +41,8 @@ export default function ProvidersPage() {
     try {
       const data = await providerApi.list()
       setProviders(data)
-    } catch (e: any) {
-      // ignore list errors
+    } catch {
+      setProviders([])
     } finally {
       setLoading(false)
     }
@@ -42,8 +53,8 @@ export default function ProvidersPage() {
     try {
       const data = await providerApi.types()
       setTypes(data)
-    } catch (e: any) {
-      console.error('fetchTypes error', e)
+    } catch (error: unknown) {
+      console.error('fetchTypes error', error)
     } finally {
       setTypesLoading(false)
     }
@@ -133,15 +144,6 @@ export default function ProvidersPage() {
     return providers.filter((p) => p.category === listCategory)
   }, [providers, listCategory])
 
-  const getErrorMessage = (e: any): string => {
-    const detail = e?.response?.data?.detail
-    if (typeof detail === 'string') return detail
-    if (detail && typeof detail === 'object') {
-      return detail.error || detail.message || JSON.stringify(detail)
-    }
-    return e?.message || '操作失败'
-  }
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     const err = validate()
@@ -151,28 +153,32 @@ export default function ProvidersPage() {
     }
     setFormError(null)
     try {
-      const payload: any = {
+      const sharedPayload = {
         type: form.type,
         category: form.category,
         name: form.name.trim(),
         enabled: form.enabled,
+        ...(selectedType?.requires_base_url ? { base_url: form.base_url.trim() } : {}),
       }
-      if (selectedType?.requires_base_url) {
-        payload.base_url = form.base_url.trim()
-      }
-      if (form.api_key.trim()) {
-        payload.api_key = form.api_key.trim()
-      }
+
       if (editingId !== null) {
-        payload.selected_models = form.selected_models
+        const payload: ProviderUpdate = {
+          ...sharedPayload,
+          ...(form.api_key.trim() ? { api_key: form.api_key.trim() } : {}),
+          selected_models: form.selected_models,
+        }
         await providerApi.update(editingId, payload)
       } else {
+        const payload: ProviderCreate = {
+          ...sharedPayload,
+          api_key: form.api_key.trim(),
+        }
         await providerApi.create(payload)
       }
       await fetchProviders()
       closeModal()
-    } catch (e: any) {
-      setFormError(getErrorMessage(e))
+    } catch (error: unknown) {
+      setFormError(getApiErrorMessage(error, '保存 Provider 失败'))
     }
   }
 
@@ -180,8 +186,8 @@ export default function ProvidersPage() {
     try {
       await providerApi.update(p.id, { enabled: !p.enabled })
       await fetchProviders()
-    } catch (e: any) {
-      alert(getErrorMessage(e))
+    } catch (error: unknown) {
+      alert(getApiErrorMessage(error, '更新 Provider 状态失败'))
     }
   }
 
@@ -191,8 +197,8 @@ export default function ProvidersPage() {
     try {
       const res = await providerApi.test(editingId)
       setTestStatus({ msg: res.status || '连接成功', ok: true })
-    } catch (e: any) {
-      setTestStatus({ msg: getErrorMessage(e), ok: false })
+    } catch (error: unknown) {
+      setTestStatus({ msg: getApiErrorMessage(error, '连接测试失败'), ok: false })
     }
   }
 
@@ -203,8 +209,8 @@ export default function ProvidersPage() {
       const res = await providerApi.models(editingId, true)
       setCachedModels(res.models)
       setCachedAt(res.cached_at || null)
-    } catch (e: any) {
-      setFormError(getErrorMessage(e))
+    } catch (error: unknown) {
+      setFormError(getApiErrorMessage(error, '刷新模型列表失败'))
     } finally {
       setModelsLoading(false)
     }
@@ -216,9 +222,9 @@ export default function ProvidersPage() {
       await providerApi.delete(confirmDeleteId)
       setConfirmDeleteId(null)
       await fetchProviders()
-    } catch (e: any) {
-      alert(getErrorMessage(e))
-      if (e?.response?.status !== 409) {
+    } catch (error: unknown) {
+      alert(getApiErrorMessage(error, '删除 Provider 失败'))
+      if (getApiErrorStatus(error) !== 409) {
         setConfirmDeleteId(null)
       }
     }

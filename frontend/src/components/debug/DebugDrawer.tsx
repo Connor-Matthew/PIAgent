@@ -57,8 +57,8 @@ export function DebugDrawer() {
   }
 
   const canRun = startInputs.length > 0
-    ? !isRunning && startInputs.every((f) => !f.required || (runInputs[f.name] !== undefined && runInputs[f.name] !== ''))
-    : !isRunning && !!inputText.trim()
+    ? !isRunning && !!workflowId && startInputs.every((f) => !f.required || (runInputs[f.name] !== undefined && runInputs[f.name] !== ''))
+    : !isRunning && !!workflowId && !!inputText.trim()
 
   return (
     <div className="border-t border-slate-700 bg-slate-900 shrink-0" style={{ height: '40vh' }}>

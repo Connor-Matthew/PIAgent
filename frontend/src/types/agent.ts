@@ -1,4 +1,4 @@
-import type { WorkflowGraph } from './workflow'
+import type { SSEEvent, WorkflowGraph } from './workflow'
 
 export interface ClarificationTurn {
   turn_index: number
@@ -64,3 +64,39 @@ export interface AgentSessionEvent {
   message?: string
   recoverable?: boolean
 }
+
+export type AgentAutoRunEventType =
+  | 'planning_start'
+  | 'planning_update'
+  | 'planner_action'
+  | 'planner_observe'
+  | 'node_added'
+  | 'edge_added'
+  | 'node_config_updated'
+  | 'workflow_built'
+  | 'planning_error'
+  | 'plan_ready'
+
+export interface AgentAutoRunEvent {
+  type: AgentAutoRunEventType
+  goal?: string
+  text?: string
+  name?: string
+  summary?: string
+  counts?: Record<string, number>
+  node?: WorkflowGraph['nodes'][number]
+  edge?: WorkflowGraph['edges'][number]
+  node_id?: string
+  patch?: Record<string, unknown>
+  graph?: WorkflowGraph
+  recipe?: RecipeIR
+  defaults_applied?: boolean
+  rationale?: string
+  node_count?: number
+  edge_count?: number
+  stage?: string
+  message?: string
+  recoverable?: boolean
+}
+
+export type AgentAutoRunStreamEvent = AgentAutoRunEvent | SSEEvent

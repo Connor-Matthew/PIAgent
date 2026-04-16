@@ -4,13 +4,28 @@ import { ReactFlowProvider } from 'reactflow'
 import { AgentPanel } from './components/agent/AgentPanel'
 import { NodeLibrary } from './components/panels/NodeLibrary'
 import { WorkflowCanvas } from './components/canvas/WorkflowCanvas'
-import { NodeConfig } from './components/panels/NodeConfig'
-import { DebugDrawer } from './components/debug/DebugDrawer'
+import { RightPanel } from './components/panels/RightPanel'
 import { useWorkflowStore, defaultStartNode, defaultEndNode } from './stores/workflowStore'
 import { useDebugStore } from './stores/debugStore'
 import { workflowApi } from './services/api'
-import type { WorkflowGraph } from './types/workflow'
+import type { WorkflowGraph, WorkflowGraphNode } from './types/workflow'
 import ProvidersPage from './pages/Providers'
+
+function toWorkflowGraphNode(node: typeof defaultStartNode | typeof defaultEndNode): WorkflowGraphNode {
+  return {
+    id: node.id,
+    type: node.type ?? node.data.nodeType,
+    position: node.position,
+    data: { ...node.data },
+  }
+}
+
+function createDefaultGraph(): WorkflowGraph {
+  return {
+    nodes: [toWorkflowGraphNode(defaultStartNode), toWorkflowGraphNode(defaultEndNode)],
+    edges: [],
+  }
+}
 
 function WorkflowEditor() {
   const { workflowId, isDraft, setWorkflow } = useWorkflowStore()
@@ -21,20 +36,14 @@ function WorkflowEditor() {
       if (list.length > 0 && !workflowId) {
         const first = list[0]
         workflowApi.get(first.id).then((wf) => {
-          const graph = wf.graph as WorkflowGraph
-          setWorkflow(wf.id, wf.name, (graph.nodes || []) as any, (graph.edges || []) as any)
+          setWorkflow(wf.id, wf.name, wf.graph.nodes, wf.graph.edges)
         })
       } else if (!workflowId) {
-        const defaultGraph: WorkflowGraph = {
-          nodes: [defaultStartNode, defaultEndNode] as any,
-          edges: [],
-        }
         workflowApi
-          .create({ name: '未命名工作流', graph: defaultGraph })
+          .create({ name: '未命名工作流', graph: createDefaultGraph() })
           .then((wf) => {
-            const graph = wf.graph as WorkflowGraph
-            setWorkflow(wf.id, wf.name, (graph.nodes || []) as any, (graph.edges || []) as any)
-        })
+            setWorkflow(wf.id, wf.name, wf.graph.nodes, wf.graph.edges)
+          })
       }
     })
   }, [isDraft, setWorkflow, workflowId])
@@ -47,9 +56,8 @@ function WorkflowEditor() {
         <div className="flex-1 flex flex-col overflow-hidden">
           <AgentPanel />
           <WorkflowCanvas />
-          <DebugDrawer />
         </div>
-        <NodeConfig />
+        <RightPanel />
       </div>
     </>
   )
@@ -65,15 +73,10 @@ function AppContent() {
   const [isSaving, setIsSaving] = useState(false)
 
   const createNewWorkflow = () => {
-    const defaultGraph: WorkflowGraph = {
-      nodes: [defaultStartNode, defaultEndNode] as any,
-      edges: [],
-    }
     workflowApi
-      .create({ name: '未命名工作流', graph: defaultGraph })
+      .create({ name: '未命名工作流', graph: createDefaultGraph() })
       .then((wf) => {
-        const graph = wf.graph as WorkflowGraph
-        setWorkflow(wf.id, wf.name, (graph.nodes || []) as any, (graph.edges || []) as any)
+        setWorkflow(wf.id, wf.name, wf.graph.nodes, wf.graph.edges)
         debugReset()
       })
   }

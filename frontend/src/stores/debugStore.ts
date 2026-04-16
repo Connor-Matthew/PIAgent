@@ -16,11 +16,18 @@ interface DebugState {
   finalOutputs: Record<string, unknown> | null
 
   toggleDrawer: () => void
+  openDrawer: () => void
+  closeDrawer: () => void
   setMode: (mode: DebugMode) => void
   setInputText: (text: string) => void
   setRunInput: (name: string, value: unknown) => void
   setRunInputs: (inputs: Record<string, unknown>) => void
   startRun: () => void
+  finishRun: (patch?: {
+    duration?: number | null
+    finalAnswer?: string | null
+    finalOutputs?: Record<string, unknown> | null
+  }) => void
   handleSSEEvent: (event: SSEEvent) => void
   reset: () => void
 }
@@ -39,6 +46,10 @@ export const useDebugStore = create<DebugState>((set, get) => ({
 
   toggleDrawer: () => set({ isOpen: !get().isOpen }),
 
+  openDrawer: () => set({ isOpen: true }),
+
+  closeDrawer: () => set({ isOpen: false }),
+
   setMode: (mode) => set({ mode }),
 
   setInputText: (text) => set({ inputText: text }),
@@ -56,6 +67,14 @@ export const useDebugStore = create<DebugState>((set, get) => ({
       totalDuration: null,
       finalAnswer: null,
       finalOutputs: null,
+    }),
+
+  finishRun: (patch) =>
+    set({
+      isRunning: false,
+      totalDuration: patch?.duration ?? get().totalDuration,
+      finalAnswer: patch?.finalAnswer ?? get().finalAnswer,
+      finalOutputs: patch?.finalOutputs ?? get().finalOutputs,
     }),
 
   handleSSEEvent: (event) => {

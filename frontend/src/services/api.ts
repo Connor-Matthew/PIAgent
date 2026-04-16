@@ -1,9 +1,94 @@
 import axios from 'axios'
 import type { Workflow, WorkflowGraph } from '../types/workflow'
 import type { Provider, ProviderCreate, ProviderUpdate, ProviderTypeInfo } from '../types/provider'
-import type { AgentSession } from '../types/agent'
+import type { AgentAutoRunStreamEvent, AgentSession } from '../types/agent'
 
 const api = axios.create({ baseURL: '/api' })
+
+function parseSSEBlock(block: string) {
+  const lines = block.split(/\r?\n/)
+  let eventName = ''
+  const dataLines: string[] = []
+
+  for (const rawLine of lines) {
+    const line = rawLine.trimEnd()
+    if (!line || line.startsWith(':')) continue
+    if (line.startsWith('event:')) {
+      eventName = line.slice('event:'.length).trim()
+      continue
+    }
+    if (line.startsWith('data:')) {
+      dataLines.push(line.slice('data:'.length).trimStart())
+    }
+  }
+
+  if (dataLines.length === 0) return null
+
+  const payload = JSON.parse(dataLines.join('\n')) as Record<string, unknown>
+  if (!payload.type && eventName) {
+    payload.type = eventName
+  }
+  return payload as unknown as AgentAutoRunStreamEvent
+}
+
+async function streamAgentEvents(
+  goal: string,
+  onEvent: (event: AgentAutoRunStreamEvent) => void
+) {
+  const response = await fetch('/api/harness/auto-run', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'text/event-stream',
+    },
+    body: JSON.stringify({ goal }),
+  })
+
+  if (!response.ok) {
+    const text = await response.text()
+    let detail = ''
+    try {
+      const parsed = JSON.parse(text) as { detail?: string }
+      detail = parsed.detail || ''
+    } catch {
+      detail = ''
+    }
+    throw new Error(detail || text || 'Agent auto-run failed')
+  }
+
+  if (!response.body) {
+    throw new Error('Agent auto-run stream is unavailable')
+  }
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  while (true) {
+    const { value, done } = await reader.read()
+    buffer += decoder.decode(value || new Uint8Array(), { stream: !done })
+
+    let boundaryIndex = buffer.indexOf('\n\n')
+    while (boundaryIndex >= 0) {
+      const block = buffer.slice(0, boundaryIndex)
+      buffer = buffer.slice(boundaryIndex + 2)
+      const parsed = parseSSEBlock(block)
+      if (parsed) {
+        onEvent(parsed)
+      }
+      boundaryIndex = buffer.indexOf('\n\n')
+    }
+
+    if (done) {
+      break
+    }
+  }
+
+  const trailing = parseSSEBlock(buffer)
+  if (trailing) {
+    onEvent(trailing)
+  }
+}
 
 export const workflowApi = {
   list: () => api.get<Workflow[]>('/workflows').then(r => r.data),
@@ -52,5 +137,7 @@ export const agentApi = {
     api.post<{ status: string }>(`/agent/sessions/${id}/skip`).then(r => r.data),
   applySession: (id: string) =>
     api.post<{ workflow_id: string }>(`/agent/sessions/${id}/apply`).then(r => r.data),
+  autoRun: (goal: string, onEvent: (event: AgentAutoRunStreamEvent) => void) =>
+    streamAgentEvents(goal, onEvent),
   eventsUrl: (id: string) => `/api/agent/sessions/${id}/events`,
 }

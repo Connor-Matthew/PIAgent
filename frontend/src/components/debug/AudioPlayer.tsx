@@ -10,10 +10,8 @@ export function AudioPlayer() {
 
   useEffect(() => {
     if (audioUrl && audioRef.current) {
+      audioRef.current.pause()
       audioRef.current.load()
-      setIsPlaying(false)
-      setCurrentTime(0)
-      setDuration(0)
     }
   }, [audioUrl])
 
@@ -22,9 +20,8 @@ export function AudioPlayer() {
     if (isPlaying) {
       audioRef.current.pause()
     } else {
-      audioRef.current.play()
+      void audioRef.current.play().catch(() => undefined)
     }
-    setIsPlaying(!isPlaying)
   }
 
   const formatTime = (t: number) => {
@@ -40,7 +37,14 @@ export function AudioPlayer() {
       <div className="text-sm text-slate-400 mb-3">🎧 AI 播客播放器</div>
       <audio
         ref={audioRef}
-        src={audioUrl || undefined}
+        src={audioUrl}
+        onLoadStart={() => {
+          setIsPlaying(false)
+          setCurrentTime(0)
+          setDuration(0)
+        }}
+        onPause={() => setIsPlaying(false)}
+        onPlay={() => setIsPlaying(true)}
         onTimeUpdate={() => setCurrentTime(audioRef.current?.currentTime ?? 0)}
         onLoadedMetadata={() => setDuration(audioRef.current?.duration ?? 0)}
         onEnded={() => setIsPlaying(false)}

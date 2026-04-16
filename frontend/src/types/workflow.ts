@@ -1,4 +1,5 @@
 export type NodeType = 'start' | 'llm' | 'rag' | 'agent' | 'tts' | 'end'
+export type NodeVisualState = 'idle' | 'building' | 'running' | 'completed' | 'failed'
 
 export type InputFieldType = 'text' | 'number' | 'select' | 'file'
 
@@ -23,19 +24,30 @@ export interface WorkflowNodeData {
   nodeType: NodeType
   locked?: boolean
   config: Record<string, unknown>
+  visualState?: NodeVisualState
+  visualLabel?: string
+  statusNote?: string
 }
 
 export interface WorkflowGraph {
   nodes: Array<{
     id: string
     type: string
+    position?: {
+      x: number
+      y: number
+    }
     data: Record<string, unknown>
   }>
   edges: Array<{
+    id?: string
     source: string
     target: string
   }>
 }
+
+export type WorkflowGraphNode = WorkflowGraph['nodes'][number]
+export type WorkflowGraphEdge = WorkflowGraph['edges'][number]
 
 export interface Workflow {
   id: string
@@ -67,7 +79,7 @@ export interface StreamProgressDelta {
 }
 
 export interface SSEEvent {
-  type: 'node_start' | 'node_stream' | 'node_heartbeat' | 'node_end' | 'workflow_end'
+  type: 'workflow_start' | 'node_start' | 'node_stream' | 'node_heartbeat' | 'node_end' | 'workflow_end'
   node_id?: string
   node_type?: string
   status?: string

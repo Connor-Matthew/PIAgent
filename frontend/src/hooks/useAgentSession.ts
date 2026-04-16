@@ -1,11 +1,10 @@
-import { startTransition, useEffect, useRef } from 'react'
+import { startTransition, useCallback, useEffect, useRef } from 'react'
 
 import { agentApi, workflowApi } from '../services/api'
 import { useAgentStore } from '../stores/agentStore'
 import { useWorkflowStore } from '../stores/workflowStore'
 import type { AgentSessionEvent } from '../types/agent'
-import type { WorkflowGraph } from '../types/workflow'
-
+import { getApiErrorMessage } from '../utils/apiErrors'
 
 const STREAMED_EVENT_TYPES: AgentSessionEvent['type'][] = [
   'agent_session_started',
@@ -17,12 +16,6 @@ const STREAMED_EVENT_TYPES: AgentSessionEvent['type'][] = [
   'plan_ready',
   'agent_error',
 ]
-
-
-function getErrorMessage(error: any, fallback: string) {
-  return error?.response?.data?.detail || error?.message || fallback
-}
-
 
 export function useAgentSession() {
   const eventSourceRef = useRef<EventSource | null>(null)
@@ -46,25 +39,25 @@ export function useAgentSession() {
 
   const { setDraftWorkflow, setWorkflow } = useWorkflowStore()
 
-  const refreshSession = async (id = sessionId) => {
+  const refreshSession = useCallback(async (id = sessionId) => {
     if (!id) return null
     const nextSession = await agentApi.getSession(id)
     startTransition(() => {
       setSession(nextSession)
     })
     return nextSession
-  }
+  }, [sessionId, setSession])
 
-  const scheduleRefresh = () => {
+  const scheduleRefresh = useCallback(() => {
     if (refreshTimerRef.current !== null) {
       window.clearTimeout(refreshTimerRef.current)
     }
     refreshTimerRef.current = window.setTimeout(() => {
       void refreshSession()
     }, 80)
-  }
+  }, [refreshSession])
 
-  const connect = (id: string) => {
+  const connect = useCallback((id: string) => {
     if (eventSourceRef.current) {
       eventSourceRef.current.close()
     }
@@ -85,7 +78,7 @@ export function useAgentSession() {
       setStreaming(false)
       es.close()
     }
-  }
+  }, [appendEvent, scheduleRefresh, setStreaming])
 
   useEffect(() => {
     if (!sessionId) return undefined
@@ -95,15 +88,14 @@ export function useAgentSession() {
       eventSourceRef.current = null
       setStreaming(false)
     }
-  }, [sessionId, setStreaming])
+  }, [connect, sessionId, setStreaming])
 
   useEffect(() => {
     if (!session?.generated_graph || session.workflow_id || session.status !== 'ready') return
-    const graph = session.generated_graph as WorkflowGraph
     setDraftWorkflow(
       session.recipe_ir?.goal_summary || 'Agent Draft',
-      (graph.nodes || []) as any,
-      (graph.edges || []) as any
+      session.generated_graph.nodes,
+      session.generated_graph.edges
     )
   }, [session, setDraftWorkflow])
 
@@ -124,7 +116,7 @@ export function useAgentSession() {
       await refreshSession(created.session_id)
       return created
     } catch (err) {
-      const message = getErrorMessage(err, '创建 Agent 会话失败')
+      const message = getApiErrorMessage(err, '创建 Agent 会话失败')
       setError(message)
       throw err
     } finally {
@@ -140,7 +132,7 @@ export function useAgentSession() {
       await agentApi.answerSession(sessionId, answer)
       await refreshSession(sessionId)
     } catch (err) {
-      const message = getErrorMessage(err, '提交回答失败')
+      const message = getApiErrorMessage(err, '提交回答失败')
       setError(message)
       throw err
     } finally {
@@ -156,7 +148,7 @@ export function useAgentSession() {
       await agentApi.skipSession(sessionId)
       await refreshSession(sessionId)
     } catch (err) {
-      const message = getErrorMessage(err, '跳过澄清失败')
+      const message = getApiErrorMessage(err, '跳过澄清失败')
       setError(message)
       throw err
     } finally {
@@ -171,12 +163,11 @@ export function useAgentSession() {
     try {
       const applied = await agentApi.applySession(sessionId)
       const workflow = await workflowApi.get(applied.workflow_id)
-      const graph = workflow.graph as WorkflowGraph
-      setWorkflow(workflow.id, workflow.name, (graph.nodes || []) as any, (graph.edges || []) as any)
+      setWorkflow(workflow.id, workflow.name, workflow.graph.nodes, workflow.graph.edges)
       await refreshSession(sessionId)
       return applied
     } catch (err) {
-      const message = getErrorMessage(err, '应用工作流失败')
+      const message = getApiErrorMessage(err, '应用工作流失败')
       setError(message)
       throw err
     } finally {
