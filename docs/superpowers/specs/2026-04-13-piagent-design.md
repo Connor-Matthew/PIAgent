@@ -2,6 +2,10 @@
 
 > **更新记录**
 > - 2026-04-14：默认 Input / Output 节点 + 变量契约阶段已实施完成。后端已新增 `template.py`、扩展 `WorkflowState`、完成 `CompilerError` IO 校验、`/run` 接口支持 `inputs` dict，全部 64 项测试通过。
+> - 2026-04-14：Provider 实例化管理阶段已实施完成。后端新增 `providers` 表、`core/crypto.py`、Provider CRUD API、模型列表缓存、`openai_compatible` 协议支持，`compiler.py` 增加 provider_id 校验，全部 82 项测试通过。
+> - 2026-04-15：MiniMax TTS 专用节点接入阶段已实施完成。Provider 表新增 `category` 字段（`llm`/`tts`）、新增 `MiniMaxTTSProvider`、`TTSNode` 复用 Provider 系统、前端 Provider 管理页和 TTS 配置面板均支持 category 切换，全部 91 项测试通过。
+> - 2026-04-15（计划）：节点级流式执行阶段。LLM/Agent 节点接入 token 级 `node_stream` 推送，长耗时节点（TTS）增加 `node_heartbeat` 心跳事件，前端 NodeStatusCard 实现打字机渲染与计时器。详见 `plans/2026-04-15-streaming-execution.md`。
+> - 2026-04-15（计划）：TTS 长文本分片并行合成阶段。新增句子级分片器，`asyncio.gather + Semaphore` 并发合成，按序拼接 mp3，进度复用 `node_stream` 事件契约（`delta.phase = "tts_chunk"`）。详见 `plans/2026-04-15-tts-chunking.md`。
 
 ## 项目定位
 
@@ -56,9 +60,9 @@ SQLite + Chroma
 
 ### 2. 大模型节点 (LLM)
 - 通过 LangChain ChatModel 调用 LLM
-- 可配置：模型提供商、模型选择、Temperature、System Prompt
+- 可配置：**Provider 实例（`provider_id`）**、模型（从该实例动态拉取的列表里选）、Temperature、System Prompt、流式开关
 - 支持流式输出（streaming tokens）
-- 多 Provider：OpenAI / Anthropic / Google / DeepSeek
+- Provider 为 DB 存储的一等实体（见 §Provider 管理），支持 OpenAI / Anthropic / Google / DeepSeek / **OpenAI 兼容协议**（接 Ollama / vLLM / 硅基流动等）
 
 ### 3. RAG 知识检索节点
 - 完整 RAG 链路：文本 → Embedding → 向量检索 (Chroma) → Reranking → 上下文注入
@@ -73,8 +77,10 @@ SQLite + Chroma
 
 ### 5. TTS 音频合成节点
 - LangChain Tool 封装
-- 接收文本，调用 TTS 服务生成音频
-- 抽象接口设计（BaseTTSProvider），支持多 Provider 切换
+- 接收文本，调用 TTS 服务生成音频（当前接入 MiniMax `t2a_v2`，hex → mp3 落盘 → 返回 `/audio/{uuid}.mp3` URL）
+- 抽象接口设计（`BaseTTSProvider` + `synthesize` / `synthesize_bytes` 双层接口），支持多 Provider 切换
+- 复用 Provider 管理系统：节点配置只选 `provider_id` + 模型 + voice/emotion/speed，API key 加密存 DB
+- **长文本分片并行合成**（计划阶段）：超过单片上限自动按句子切分 → `asyncio.gather + Semaphore(5)` 并发合成 → 按序拼接 mp3 → 通过 `node_stream` 事件推送进度
 - 输出音频 URL
 
 ### 6. 结束节点 (End)
@@ -150,7 +156,7 @@ End 节点和任何模板字段都通过 `{{...}}` 占位符引用上游数据�
     - 类型 = 输入：值是手动输入的字面量
     - 类型 = 引用：值是两级下拉选择器（上游节点 → 字段），选中后写入 `{{nodeId.fieldName}}`
   - 回答内容：多行 textarea，支持在光标位置插入 `{{varName}}` 或 `{{nodeId.fieldName}}`
-- LLM 节点：Provider 选择、模型选择、Temperature 滑块、System Prompt 编辑、流式开关
+- LLM 节点：**Provider 实例下拉**（数据源 `/api/providers?enabled=true`）→ **模型下拉**（数据源 `/api/providers/{id}/models`，带"刷新"按钮）、Temperature 滑块、System Prompt 编辑、流式开关
 - RAG 节点：知识库选择、Top-K、相似度阈值
 - TTS 节点：Provider 选择、音色选择
 
@@ -185,11 +191,21 @@ GET    /api/workflows/{id}/runs/{rid}/events — SSE 实时事件流
 
 ### SSE 事件格式
 ```
-event: node_start    // { node_id, status: "running" }
-event: node_stream   // { node_id, chunk: "文本片段" }  ← LLM 流式
-event: node_end      // { node_id, status: "completed", duration, output }
-event: workflow_end  // { status: "completed", duration, answer, outputs }
+event: workflow_start   // { }
+event: node_start       // { node_id, node_type, status: "running" }
+event: node_stream      // { node_id, node_type, delta, seq }
+                        //   delta 为字符串（LLM token）或对象 { phase, ... }
+                        //   例：{ phase: "tts_chunk", current: 3, total: 7 }
+                        //   例：{ phase: "thought" | "action" | "observation", text } ← Agent 节点
+event: node_heartbeat   // { node_id, node_type, elapsed, message }  ← 长耗时非流式节点
+event: node_end         // { node_id, node_type, status: "completed" | "failed", duration, output, error? }
+event: workflow_end     // { status, duration, answer, outputs }
 ```
+**事件契约约定**：
+- `node_stream.seq` 单调递增，前端用于检测乱序/丢包（防御性校验）
+- `node_end.output` 为节点最终输出；流式节点累积 `delta` 后应等于 `output` 的对应字段
+- `node_heartbeat` 与 `node_stream` 互斥使用：能流式的节点（LLM/Agent）发 stream，不能流式的（TTS）发 heartbeat
+- 流中断/异常时必须 emit `node_end` with `status=failed`，避免前端永远卡 running
 
 ### 知识库 (RAG)
 ```
@@ -199,13 +215,25 @@ GET    /api/knowledge-bases/{id}         — 知识库详情
 POST   /api/knowledge-bases/{id}/query   — 检索测试
 ```
 
-### 模型 & 配置
+### Provider 管理
+
+Provider 是 DB 存储的一等实体，按 `category` 分为 `llm` 和 `tts`。LLM 支持 5 种 `type`：`openai` / `anthropic` / `google` / `deepseek` / `openai_compatible`；TTS 当前支持 `fish_audio` 和 `minimax_tts`。`api_key` 使用 Fernet 对称加密存储，GET 接口返回 `sk-***` + 尾 4 位。同一 `type` 可存在多个实例（以 `name` 区分）。
+
 ```
-GET    /api/providers                  — Provider 列表
-GET    /api/providers/{name}/models    — 模型列表
-POST   /api/providers/{name}/test      — 连通性测试
-GET    /api/audio/{filename}           — 音频文件访问
+GET    /api/providers                       — 列表（key masked）
+POST   /api/providers                       — 创建 {type, name, base_url?, api_key, enabled?}
+GET    /api/providers/{id}                  — 详情（key masked）
+PUT    /api/providers/{id}                  — 更新（api_key 省略则不改）
+DELETE /api/providers/{id}                  — 删除（被 LLM 节点引用时 409）
+POST   /api/providers/{id}/test             — 鉴权测试（调用 list-models 端点，200 即通过）
+GET    /api/providers/{id}/models           — 模型列表（extra_config 缓存 + ?refresh=true 强刷新）
+GET    /api/providers/types                 — 类型元信息（是否需要 base_url、默认值等）供前端渲染
+GET    /api/audio/{filename}                — 音频文件访问
 ```
+
+模型列表策略：`openai` / `openai_compatible` / `deepseek` / `anthropic` 调用各自的 `GET /v1/models`；`google` 用 SDK `list_models` 或静态兜底。结果写入 `Provider.extra_config.cached_models`。
+
+首次启动种子迁移：若 `providers` 表为空且 `.env` 仍有旧 key，自动建一批默认 Provider 行，然后旧 key 逐步废弃。
 
 ## 项目目录结构
 
@@ -220,10 +248,11 @@ backend/
 │   ├── knowledge.py         — 知识库管理
 │   └── providers.py         — 模型 Provider
 ├── core/
-│   ├── compiler.py          — Graph Compiler（画布 JSON → LangGraph）+ IO 节点唯一性校验 + CompilerError
+│   ├── compiler.py          — Graph Compiler（画布 JSON → LangGraph）+ IO 节点唯一性校验 + provider_id 校验 + CompilerError
 │   ├── engine.py            — 执行引擎 + SSE 推送（workflow_end 带 answer / outputs）
 │   ├── state.py             — WorkflowState 定义（inputs / node_outputs / answer / outputs + 兼容字段）
-│   └── template.py          — {{nodeId.fieldName}} / {{varName}} 变量引用解析与模板渲染
+│   ├── template.py          — {{nodeId.fieldName}} / {{varName}} 变量引用解析与模板渲染
+│   └── crypto.py            — Fernet 对称加密（Provider api_key 存储用）
 ├── nodes/
 │   ├── base.py              — BaseNode 抽象基类
 │   ├── start_node.py
@@ -234,14 +263,17 @@ backend/
 │   ├── end_node.py
 │   └── registry.py          — 节点注册表
 ├── providers/
-│   ├── base.py              — BaseLLMProvider
-│   ├── openai.py
-│   ├── anthropic.py
-│   ├── google.py
-│   └── deepseek.py
+│   ├── __init__.py          — PROVIDER_REGISTRY + build_provider(db_row) 工厂
+│   ├── base.py              — BaseLLMProvider（list_models / test_connection / create_chat_model）
+│   ├── openai_provider.py
+│   ├── anthropic_provider.py
+│   ├── google_provider.py
+│   ├── deepseek_provider.py
+│   └── openai_compatible_provider.py
 ├── tts/
 │   ├── base.py              — BaseTTSProvider
-│   └── fish_audio.py
+│   ├── fish_audio.py        — FishAudio 实现
+│   └── minimax.py           — MiniMax t2a_v2 实现
 ├── rag/
 │   ├── embeddings.py        — Embedding 模型
 │   ├── vectorstore.py       — Chroma 封装
@@ -249,7 +281,8 @@ backend/
 └── models/
     ├── workflow.py
     ├── run.py
-    └── knowledge_base.py
+    ├── knowledge_base.py
+    └── provider.py          — Provider 表（type / name / base_url / api_key_encrypted / enabled / extra_config）
 ```
 
 ### 前端 frontend/
@@ -300,6 +333,11 @@ frontend/                     — Vite + React + TypeScript
 | LangGraph 图编译 | 前端画布 JSON → DAG 验证（环检测）→ 拓扑排序 → LangGraph StateGraph 编译 |
 | RAG 全链路 | 文档加载 → 分块策略 → Embedding → Chroma 存储 → 相似度检索 → Reranking → 上下文注入 |
 | ReAct Agent | Thought → Action → Observation 循环，LLM 自主决定工具调用 |
-| LLM 流式输出 + SSE | LangChain streaming → FastAPI StreamingResponse → SSE → 前端逐 token 渲染 |
+| LLM 流式输出 + SSE | LangChain streaming → FastAPI StreamingResponse → SSE → 前端逐 token 渲染（打字机效果）；事件回调 `on_event` 沿 engine → node → provider 透传，异步生成器分层清晰 |
+| 节点级状态推送粒度 | 从「节点黑盒等待」升级为「节点内部过程可见」：LLM 走 token 级 `node_stream`，TTS 走 2s `node_heartbeat`，前端 RAF 节流避免高频重渲染 |
+| TTS 长文本分片并行 | 句子级智能分片（句号 → 逗号 → 强切 + 贪心合并）+ `asyncio.gather + Semaphore(5)` 并发 + 按序拼接 mp3 + 单片重试。总耗时从 N×T 压到 ≈T，进度复用 `node_stream` 事件契约 |
+| 接口正交分解 | `synthesize`（高层落盘，返回 URL）vs `synthesize_bytes`（底层纯字节）拆分，让并行编排在不污染高层接口的前提下成为可能 |
 | 设计模式 | 策略模式（多 LLM Provider）、模板方法（BaseNode）、观察者（SSE 事件推送） |
+| 密钥安全存储 | Fernet 对称加密 api_key，API 返回 mask、仅执行时解密；SECRET_KEY 派生与开发/生产差异化处理 |
+| 多租户 Provider 抽象 | `openai_compatible` 协议类型使一套接口同时支撑 OpenAI / Ollama / vLLM / DeepSeek / 硅基流动等 OpenAI 兼容服务 |
 | React Flow 交互 | 自定义节点渲染、Handle 连接验证、拖拽、画布状态序列化 |

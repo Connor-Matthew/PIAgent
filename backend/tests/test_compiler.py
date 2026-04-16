@@ -177,6 +177,74 @@ def test_compiler_end_reference_unknown_node_raises():
         compiler.validate(graph_json)
 
 
+def test_compiler_end_reference_missing_field_raises():
+    graph_json = make_graph_json(
+        nodes=[
+            {"id": "start_1", "type": "start", "data": {}},
+            {"id": "end_1", "type": "end", "data": {
+                "outputs": [{"name": "url", "source": "reference", "value": "{{title}}"}]
+            }},
+        ],
+        edges=[],
+    )
+    compiler = GraphCompiler()
+    with pytest.raises(CompilerError, match="must specify a field name"):
+        compiler.validate(graph_json)
+
+
+def test_compiler_llm_missing_provider_id_raises():
+    graph_json = make_graph_json(
+        nodes=[
+            {"id": "start_1", "type": "start", "data": {}},
+            {"id": "llm_1", "type": "llm", "data": {}},
+            {"id": "end_1", "type": "end", "data": {}},
+        ],
+        edges=[{"source": "start_1", "target": "llm_1"}, {"source": "llm_1", "target": "end_1"}],
+    )
+    compiler = GraphCompiler()
+    from unittest.mock import MagicMock
+    mock_db = MagicMock()
+    with pytest.raises(CompilerError, match="must have a provider_id"):
+        compiler.validate(graph_json, db=mock_db)
+
+
+def test_compiler_llm_unknown_provider_id_raises():
+    graph_json = make_graph_json(
+        nodes=[
+            {"id": "start_1", "type": "start", "data": {}},
+            {"id": "llm_1", "type": "llm", "data": {"provider_id": 999}},
+            {"id": "end_1", "type": "end", "data": {}},
+        ],
+        edges=[{"source": "start_1", "target": "llm_1"}, {"source": "llm_1", "target": "end_1"}],
+    )
+    compiler = GraphCompiler()
+    from unittest.mock import MagicMock
+    mock_db = MagicMock()
+    mock_query = mock_db.query.return_value
+    mock_query.filter.return_value.first.return_value = None
+    with pytest.raises(CompilerError, match="references unknown provider"):
+        compiler.validate(graph_json, db=mock_db)
+
+
+def test_compiler_llm_disabled_provider_id_raises():
+    graph_json = make_graph_json(
+        nodes=[
+            {"id": "start_1", "type": "start", "data": {}},
+            {"id": "llm_1", "type": "llm", "data": {"provider_id": 1}},
+            {"id": "end_1", "type": "end", "data": {}},
+        ],
+        edges=[{"source": "start_1", "target": "llm_1"}, {"source": "llm_1", "target": "end_1"}],
+    )
+    compiler = GraphCompiler()
+    from unittest.mock import MagicMock
+    mock_row = MagicMock()
+    mock_row.enabled = False
+    mock_db = MagicMock()
+    mock_db.query.return_value.filter.return_value.first.return_value = mock_row
+    with pytest.raises(CompilerError, match="references disabled provider"):
+        compiler.validate(graph_json, db=mock_db)
+
+
 def test_compiler_duplicate_node_ids_raises():
     graph_json = make_graph_json(
         nodes=[
@@ -188,3 +256,24 @@ def test_compiler_duplicate_node_ids_raises():
     compiler = GraphCompiler()
     with pytest.raises(ValueError, match="Duplicate node IDs"):
         compiler.validate(graph_json)
+
+
+def test_compiler_topological_sort_ignores_unconnected_nodes():
+    graph_json = make_graph_json(
+        nodes=[
+            {"id": "start_1", "type": "start", "data": {}},
+            {"id": "llm_1", "type": "llm", "data": {}},
+            {"id": "tts_1", "type": "tts", "data": {}},
+            {"id": "end_1", "type": "end", "data": {}},
+            {"id": "orphan_1", "type": "llm", "data": {}},
+        ],
+        edges=[
+            {"source": "start_1", "target": "llm_1"},
+            {"source": "llm_1", "target": "end_1"},
+        ],
+    )
+    compiler = GraphCompiler()
+    order = compiler.topological_sort(graph_json)
+    assert "orphan_1" not in order
+    assert "tts_1" not in order
+    assert order == ["start_1", "llm_1", "end_1"]

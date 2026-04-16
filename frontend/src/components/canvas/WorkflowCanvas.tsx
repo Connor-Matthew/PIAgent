@@ -1,4 +1,4 @@
-import ReactFlow, { Background, Controls, MiniMap } from 'reactflow'
+import ReactFlow, { Background, Controls, MiniMap, MarkerType } from 'reactflow'
 import 'reactflow/dist/style.css'
 import { useWorkflowStore } from '../../stores/workflowStore'
 import { nodeTypes } from '../nodes'
@@ -6,7 +6,7 @@ import { useDnD } from '../../hooks/useDnD'
 import { CanvasToolbar } from './CanvasToolbar'
 
 export function WorkflowCanvas() {
-  const { nodes, edges, onNodesChange, onEdgesChange, onConnect, setSelectedNode } = useWorkflowStore()
+  const { nodes, edges, onNodesChange, onEdgesChange, onConnect, setSelectedNode, deleteEdge } = useWorkflowStore()
   const { onInit, onDragOver, onDrop } = useDnD()
 
   return (
@@ -22,7 +22,11 @@ export function WorkflowCanvas() {
         onDrop={onDrop}
         onNodeClick={(_, node) => setSelectedNode(node.id)}
         onPaneClick={() => setSelectedNode(null)}
+        onEdgeDoubleClick={(_, edge) => deleteEdge(edge.id)}
         nodeTypes={nodeTypes}
+        defaultEdgeOptions={{
+          markerEnd: { type: MarkerType.ArrowClosed, color: '#64748b' },
+        }}
         fitView
         className="bg-[#0a0f1a]"
       >

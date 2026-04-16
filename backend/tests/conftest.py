@@ -6,7 +6,12 @@ from sqlalchemy.pool import StaticPool
 
 from backend.database import Base, get_db
 from backend.main import app
+from backend.config import settings
 import backend.models
+
+# Set a test secret key for crypto tests
+TEST_FERNET_KEY = "FI-QGnkmDa163f8iyECd1p0fKCSIUR8LvZ_rI-ECdng="
+settings.secret_key = settings.secret_key.__class__(TEST_FERNET_KEY)
 
 TEST_DB_URL = "sqlite:///:memory:"
 test_engine = create_engine(

@@ -2,6 +2,7 @@ from pydantic import SecretStr
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
+    env: str = "development"
     database_url: str = "sqlite:///./piagent.db"
     audio_dir: str = "./audio_files"
     openai_api_key: SecretStr = ""
@@ -10,8 +11,10 @@ class Settings(BaseSettings):
     deepseek_api_key: SecretStr = ""
     fish_audio_api_key: SecretStr = ""
     chroma_dir: str = "./chroma_data"
+    secret_key: SecretStr = ""
     upload_dir: str = "./uploads"
     cors_origins: list[str] = ["http://localhost:5173"]
+    agent_llm_enabled: bool = False
 
     class Config:
         env_file = ".env"

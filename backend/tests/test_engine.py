@@ -126,6 +126,8 @@ async def test_engine_emits_failed_event_on_error():
         workflow_end_events = [e for e in events if e["type"] == "workflow_end"]
         assert len(workflow_end_events) == 1
         assert workflow_end_events[0]["status"] == "failed"
+        assert "answer" in workflow_end_events[0]
+        assert "outputs" in workflow_end_events[0]
     finally:
         node_registry.unregister("exploding")
 
@@ -136,7 +138,7 @@ async def test_engine_end_to_end_with_references():
     graph_json = {
         "nodes": [
             {"id": "start_1", "type": "start", "data": {"inputs": [{"name": "topic", "type": "text", "required": True}]}},
-            {"id": "llm_1", "type": "llm", "data": {}},
+            {"id": "llm_1", "type": "llm", "data": {"provider_id": 1}},
             {"id": "tts_1", "type": "tts", "data": {}},
             {"id": "end_1", "type": "end", "data": {
                 "outputs": [
@@ -176,3 +178,55 @@ async def test_engine_end_to_end_with_references():
         assert result["outputs"]["title"] == "今天的 AI 播客"
         assert result["node_outputs"]["llm_1"]["text"] == "Generated podcast script."
         assert result["node_outputs"]["tts_1"]["audio_url"] == "/audio/test.mp3"
+
+
+@pytest.mark.asyncio
+async def test_engine_skips_unconnected_nodes():
+    """Unconnected nodes on the canvas should not be executed."""
+
+    class SideEffectNode(BaseNode):
+        node_type = "side_effect"
+
+        async def execute(self, state: WorkflowState, **kwargs) -> WorkflowState:
+            state["context"] = state.get("context", "") + "ran"
+            return state
+
+    from backend.nodes.registry import node_registry
+    node_registry.register(SideEffectNode)
+    try:
+        graph_json = {
+            "nodes": [
+                {"id": "start_1", "type": "start", "data": {}},
+                {"id": "llm_1", "type": "llm", "data": {}},
+                {"id": "end_1", "type": "end", "data": {}},
+                {"id": "orphan_1", "type": "side_effect", "data": {}},
+            ],
+            "edges": [
+                {"source": "start_1", "target": "llm_1"},
+                {"source": "llm_1", "target": "end_1"},
+            ],
+        }
+
+        events = []
+        async def on_event(event):
+            events.append(event)
+
+        engine = ExecutionEngine()
+        with patch("backend.nodes.llm_node.LLMNode._get_chat_model") as mock_llm:
+            mock_model = AsyncMock()
+            mock_response = MagicMock()
+            mock_response.content = "hi"
+            mock_model.ainvoke.return_value = mock_response
+            mock_llm.return_value = mock_model
+
+            result = await engine.run(graph_json, user_input="hello", on_event=on_event)
+
+        node_ids = [e.get("node_id") for e in events if e["type"] in ("node_start", "node_end")]
+        assert "orphan_1" not in node_ids
+
+        # Only start, llm, end events
+        assert node_ids.count("start_1") == 2
+        assert node_ids.count("llm_1") == 2
+        assert node_ids.count("end_1") == 2
+    finally:
+        node_registry.unregister("side_effect")
