@@ -1,3 +1,5 @@
 .worktrees/
 *.db
 .alma-snapshots
+.env
+audio_files/
