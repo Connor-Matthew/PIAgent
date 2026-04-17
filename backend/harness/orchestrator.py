@@ -19,6 +19,9 @@ from backend.config import settings
 from backend.harness.memory import HarnessMemoryStore, HarnessProjectMemoryStore
 from backend.harness.registry import HarnessSkillRegistry
 from backend.harness.schemas import HarnessRunResult
+from backend.harness.schemas import DecisionV2, decision_v2_to_lead_decision
+from backend.harness.schemas import CallToolDecision, ProposeActionDecision, FinalizeDecision, SpawnSubAgentDecision, AskUserDecision
+from backend.harness.tools.providers import ListProvidersTool
 from backend.harness.subagents import (
     CapabilityScoutAgent,
     RecipeChallengerAgent,
@@ -359,7 +362,7 @@ class HarnessOrchestrator:
         capabilities,
         project_memory_summary,
     ) -> HarnessContext:
-        from backend.harness.schemas import LeadDecision, DecisionObservation, LoopTraceEntry
+        from backend.harness.schemas import DecisionObservation, LoopTraceEntry
         from backend.harness.prompts import build_lead_decision_system_prompt, build_lead_decision_user_prompt
         from backend.agent.llm import AgentLLMDisabledError
         import time
@@ -368,6 +371,10 @@ class HarnessOrchestrator:
             db=self.db,
             validation_skill=self.registry.graph_validation,
         )
+        tools = {
+            "list_providers": ListProvidersTool(capabilities),
+        }
+        tool_results: list[dict] = []
         history: list[DecisionObservation] = []
         step = 0
         max_steps = settings.harness_loop_max_steps
@@ -384,6 +391,7 @@ class HarnessOrchestrator:
                     project_memory_summary=project_memory_summary,
                     graph_snapshot=snapshot,
                     history=history,
+                    tool_results=tool_results,
                 )
             except Exception:
                 # Fall back to single-shot plan on any error
@@ -399,7 +407,7 @@ class HarnessOrchestrator:
 
             await emit({"type": "lead_decision", "step": step, "decision": decision.model_dump()})
 
-            if decision.done:
+            if isinstance(decision, FinalizeDecision):
                 await emit({"type": "lead_step_end", "step": step, "done": True})
                 break
 
@@ -410,6 +418,7 @@ class HarnessOrchestrator:
                 emit,
                 goal,
                 capabilities,
+                tools=tools,
             )
             await emit({"type": "lead_observation", "step": step, "observation": observation.model_dump()})
             history.append(observation)
@@ -446,14 +455,52 @@ class HarnessOrchestrator:
         self.memory_store.finalize_session(context.session_id, graph=context.graph, recipe=context.recipe, events=list(context.events), status=f"harness_{route}_completed")
         return context
 
-    async def _execute_decision(self, decision: "LeadDecision", builder: GraphDraftBuilder, context: HarnessContext, emit, goal: str, capabilities):
+    async def _execute_decision(self, decision: DecisionV2, builder: GraphDraftBuilder, context: HarnessContext, emit, goal: str, capabilities, tools: dict | None = None):
         from backend.harness.schemas import DecisionObservation
         from backend.agent.planner import PlannedDraft
         import time
 
+        tools = tools or {}
         step_index = len(context.loop_trace)
 
-        if decision.action:
+        if isinstance(decision, CallToolDecision):
+            await emit({"type": "tool_call", "name": decision.name, "arguments": decision.arguments, "call_id": f"tc_{step_index}"})
+            tool = tools.get(decision.name)
+            if tool is None:
+                error = f"Unknown tool: {decision.name}"
+                await emit({"type": "tool_result", "call_id": f"tc_{step_index}", "ok": False, "summary": error, "latency_ms": 0})
+                return DecisionObservation(
+                    step_index=step_index,
+                    action_taken=f"call_tool:{decision.name}",
+                    success=False,
+                    error=error,
+                    graph_snapshot=builder.snapshot(),
+                )
+            try:
+                start = time.time()
+                result = await tool.run(tool.input_schema.model_validate(decision.arguments))
+                latency = int((time.time() - start) * 1000)
+                summary = result.model_dump_json()
+                await emit({"type": "tool_result", "call_id": f"tc_{step_index}", "ok": True, "summary": summary, "latency_ms": latency})
+                return DecisionObservation(
+                    step_index=step_index,
+                    action_taken=f"call_tool:{decision.name}",
+                    success=True,
+                    graph_snapshot=builder.snapshot(),
+                    skill_result_summary=summary,
+                )
+            except Exception as exc:
+                error = str(exc)
+                await emit({"type": "tool_result", "call_id": f"tc_{step_index}", "ok": False, "summary": error, "latency_ms": 0})
+                return DecisionObservation(
+                    step_index=step_index,
+                    action_taken=f"call_tool:{decision.name}",
+                    success=False,
+                    error=error,
+                    graph_snapshot=builder.snapshot(),
+                )
+
+        if isinstance(decision, ProposeActionDecision):
             action = coerce_graph_action(decision.action)
             try:
                 builder.apply(action)
@@ -468,31 +515,13 @@ class HarnessOrchestrator:
                 elif isinstance(action, UpdateNodeConfigAction):
                     await emit({"type": "node_config_updated", "node_id": action.node_id, "patch": action.config, "config": action.config})
                 elif isinstance(action, CommitGraphAction):
-                    # Optional sub-agent pre-commit checks (copy logic from existing build())
-                    if self.enable_subagents:
-                        await emit({"type": "subagent_spawned", "agent": RecipeChallengerAgent.name, "role": "recipe_review"})
-                        challenger = RecipeChallengerAgent(llm=AgentLLMClient(self.db))
-                        challenger_report = await challenger.analyze({"goal": goal, "recipe_ir": context.recipe})
-                        await emit({"type": "subagent_result", "agent": RecipeChallengerAgent.name, "report": challenger_report.model_dump()})
-                        if challenger_report.warnings:
-                            await emit({"type": "planning_update", "text": f"RecipeChallenger 发现 {len(challenger_report.warnings)} 条建议"})
-
-                        await emit({"type": "subagent_spawned", "agent": GraphStructureValidator.name, "role": "pre_commit_review"})
-                        validator = GraphStructureValidator()
-                        report = await validator.analyze({"graph": builder.graph})
-                        await emit({"type": "subagent_result", "agent": GraphStructureValidator.name, "report": report.model_dump()})
-                        if report.warnings:
-                            await emit({"type": "planning_update", "text": f"GraphStructureValidator 发现 {len(report.warnings)} 条建议"})
-
                     context.draft = builder.draft
                     await emit({"type": "workflow_built", "graph": builder.graph, "node_count": len(builder.graph.get("nodes", [])), "edge_count": len(builder.graph.get("edges", []))})
-
                 action_taken = action.__class__.__name__.replace("Action", "").lower()
             except Exception as exc:
                 success = False
                 error = str(exc)
                 action_taken = decision.action.get("kind", "unknown")
-
             return DecisionObservation(
                 step_index=step_index,
                 action_taken=action_taken,
@@ -501,60 +530,34 @@ class HarnessOrchestrator:
                 graph_snapshot=builder.snapshot(),
             )
 
-        if decision.skill:
-            skill_name = decision.skill
-            skill_input = decision.skill_input or {}
-            try:
-                if skill_name == "draft_recipe":
-                    recipe_result = self.registry.recipe.invoke(goal=goal, **skill_input)
-                    if recipe_result.ok:
-                        draft = recipe_result.value
-                        assert isinstance(draft, PlannedDraft)
-                        context.recipe = draft.recipe_ir.model_dump()
-                        context.defaults_applied = draft.defaults_applied
-                        actions = draft_to_actions(draft, route=context.route)
-                        for a in actions:
-                            builder.apply(a)
-                            if isinstance(a, PlanningUpdateAction):
-                                await emit({"type": "planning_update", "text": a.text})
-                            elif isinstance(a, AddNodeAction):
-                                await emit({"type": "node_added", "node": a.node})
-                            elif isinstance(a, AddEdgeAction):
-                                await emit({"type": "edge_added", "edge": a.edge})
-                            elif isinstance(a, CommitGraphAction):
-                                context.draft = builder.draft
-                                await emit({"type": "workflow_built", "graph": builder.graph, "node_count": len(builder.graph.get("nodes", [])), "edge_count": len(builder.graph.get("edges", []))})
-                    skill_result_summary = f"draft_recipe ok={recipe_result.ok}"
-                elif skill_name == "validate_graph":
-                    self.registry.graph_validation.validate(builder.graph, db=self.db)
-                    skill_result_summary = "validate_graph ok=True"
-                elif skill_name == "load_capabilities":
-                    skill_result_summary = "load_capabilities skipped"
-                else:
-                    skill_result_summary = f"unknown skill {skill_name}"
-                success = True
-                error = None
-            except Exception as exc:
-                success = False
-                error = str(exc)
-                skill_result_summary = str(exc)
-
+        if isinstance(decision, FinalizeDecision):
             return DecisionObservation(
                 step_index=step_index,
-                action_taken=skill_name,
-                success=success,
-                error=error,
+                action_taken="finalize",
+                success=True,
                 graph_snapshot=builder.snapshot(),
-                skill_result_summary=skill_result_summary,
             )
 
-        # Neither action nor skill
-        return DecisionObservation(
-            step_index=step_index,
-            action_taken="noop",
-            success=True,
-            graph_snapshot=builder.snapshot(),
-        )
+        if isinstance(decision, SpawnSubAgentDecision):
+            summary = f"spawn_subagent {decision.name} not yet implemented in P1"
+            return DecisionObservation(
+                step_index=step_index,
+                action_taken=f"spawn_subagent:{decision.name}",
+                success=True,
+                graph_snapshot=builder.snapshot(),
+                skill_result_summary=summary,
+            )
+
+        if isinstance(decision, AskUserDecision):
+            await emit({"type": "planning_update", "text": f"需要澄清: {decision.question}"})
+            return DecisionObservation(
+                step_index=step_index,
+                action_taken="ask_user",
+                success=True,
+                graph_snapshot=builder.snapshot(),
+            )
+
+        raise ValueError(f"Unhandled DecisionV2: {decision}")
 
     async def run(
         self,
