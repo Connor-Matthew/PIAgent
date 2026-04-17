@@ -293,11 +293,11 @@ class HarnessOrchestrator:
                             await emit({"type": "planning_update", "text": f"RecipeChallenger 发现 {len(challenger_report.warnings)} 条建议"})
 
                         await emit({"type": "subagent_spawned", "agent": GraphStructureValidator.name, "role": "pre_commit_review"})
-                        critic = GraphStructureValidator()
-                        report = await critic.analyze({"graph": builder.graph})
+                        validator = GraphStructureValidator()
+                        report = await validator.analyze({"graph": builder.graph})
                         await emit({"type": "subagent_result", "agent": GraphStructureValidator.name, "report": report.model_dump()})
                         if report.warnings:
-                            await emit({"type": "planning_update", "text": f"GraphCritic 发现 {len(report.warnings)} 条建议"})
+                            await emit({"type": "planning_update", "text": f"GraphStructureValidator 发现 {len(report.warnings)} 条建议"})
 
                     draft = builder.apply(action)
                     context.draft = draft
@@ -478,11 +478,11 @@ class HarnessOrchestrator:
                             await emit({"type": "planning_update", "text": f"RecipeChallenger 发现 {len(challenger_report.warnings)} 条建议"})
 
                         await emit({"type": "subagent_spawned", "agent": GraphStructureValidator.name, "role": "pre_commit_review"})
-                        critic = GraphStructureValidator()
-                        report = await critic.analyze({"graph": builder.graph})
+                        validator = GraphStructureValidator()
+                        report = await validator.analyze({"graph": builder.graph})
                         await emit({"type": "subagent_result", "agent": GraphStructureValidator.name, "report": report.model_dump()})
                         if report.warnings:
-                            await emit({"type": "planning_update", "text": f"GraphCritic 发现 {len(report.warnings)} 条建议"})
+                            await emit({"type": "planning_update", "text": f"GraphStructureValidator 发现 {len(report.warnings)} 条建议"})
 
                     context.draft = builder.draft
                     await emit({"type": "workflow_built", "graph": builder.graph, "node_count": len(builder.graph.get("nodes", [])), "edge_count": len(builder.graph.get("edges", []))})
