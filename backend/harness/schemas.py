@@ -131,15 +131,6 @@ class DecisionObservation(BaseModel):
     skill_result_summary: str | None = None
 
 
-class LoopTraceEntry(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    step_index: int
-    decision: LeadDecision
-    observation: DecisionObservation
-    timestamp: float
-
-
-
 class CallToolDecision(BaseModel):
     model_config = ConfigDict(extra="forbid")
     kind: Literal["call_tool"] = "call_tool"
@@ -180,6 +171,15 @@ DecisionV2 = (
     | AskUserDecision
     | FinalizeDecision
 )
+
+
+class LoopTraceEntry(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    step_index: int
+    decision: DecisionV2
+    observation: DecisionObservation
+    timestamp: float
 
 
 def decision_v2_to_lead_decision(decision: DecisionV2) -> LeadDecision:

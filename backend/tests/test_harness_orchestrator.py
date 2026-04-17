@@ -8,7 +8,8 @@ from backend.harness.lead_agent import LeadAgent
 from backend.harness.memory import HarnessProjectMemoryStore
 from backend.harness.orchestrator import HarnessOrchestrator
 from backend.harness.registry import HarnessSkillRegistry
-from backend.harness.schemas import LeadAgentPlan, PlanStep
+from backend.harness.schemas import LeadAgentPlan, PlanStep, ProposeActionDecision, FinalizeDecision, CallToolDecision
+from unittest import mock
 
 
 class FakeCapabilitiesSkill:
@@ -374,18 +375,12 @@ async def test_orchestrator_loads_project_memory_when_available(db, monkeypatch)
 
 
 class FakeLoopLLMClient:
-    def __init__(self, decisions: list = None, plan: LeadAgentPlan | None = None):
-        from backend.harness.schemas import LeadDecision
-        self._LeadDecision = LeadDecision
-        self._decisions = iter(decisions or [])
+    def __init__(self, plan: LeadAgentPlan | None = None):
         self._plan = plan
         self.calls: list[dict] = []
 
     def structured_invoke(self, *, schema, system_prompt, user_prompt, provider_id=None):
         self.calls.append({"schema": schema, "system_prompt": system_prompt, "user_prompt": user_prompt})
-        from backend.harness.schemas import LeadDecision
-        if schema is LeadDecision:
-            return next(self._decisions)
         if schema is LeadAgentPlan and self._plan:
             return self._plan
         raise RuntimeError("no mock configured")
@@ -432,17 +427,10 @@ async def test_loop_multi_step_chain(db, monkeypatch):
     monkeypatch.setattr("backend.config.settings.harness_loop_enabled", True)
     registry, execution_skill, recipe_skill = _registry()
 
-    from backend.harness.schemas import LeadDecision
-    decisions = [
-        LeadDecision(skill="draft_recipe", reasoning="先生成 recipe"),
-        LeadDecision(action={"kind": "commit_graph"}, reasoning="提交图"),
-        LeadDecision(done=True, reasoning="完成"),
-    ]
-    fake_llm = FakeLoopLLMClient(decisions=decisions)
     orchestrator = HarnessOrchestrator(
         db,
         registry=registry,
-        lead_agent=LeadAgent(registry, db=db, llm=fake_llm),
+        lead_agent=LeadAgent(registry, db=db),
         enable_subagents=False,
     )
 
@@ -450,18 +438,27 @@ async def test_loop_multi_step_chain(db, monkeypatch):
     async def on_event(event):
         events.append(event)
 
-    goal = "请帮我做一个完整的知识库播客工作流"
-    result = await orchestrator.run(goal, on_event=on_event)
-    assert result.route == "harness"
-    assert result.graph is not None
+    with mock.patch.object(
+        LeadAgent,
+        "decide",
+        side_effect=[
+            ProposeActionDecision(action={"kind": "add_node", "node": {"id": "n1", "type": "start"}}),
+            ProposeActionDecision(action={"kind": "commit_graph"}),
+            FinalizeDecision(reasoning="完成"),
+        ],
+    ):
+        goal = "请帮我做一个完整的知识库播客工作流"
+        result = await orchestrator.run(goal, on_event=on_event)
+        assert result.route == "harness"
+        assert result.graph is not None
 
-    event_types = [e["type"] for e in events]
-    assert event_types.count("lead_step_start") == 3
-    assert event_types.count("lead_decision") == 3
-    assert event_types.count("lead_observation") == 2
-    assert event_types.count("lead_step_end") == 3
-    assert "workflow_built" in event_types
-    assert "plan_ready" in event_types
+        event_types = [e["type"] for e in events]
+        assert event_types.count("lead_step_start") == 3
+        assert event_types.count("lead_decision") == 3
+        assert event_types.count("lead_observation") == 2
+        assert event_types.count("lead_step_end") == 3
+        assert "workflow_built" in event_types
+        assert "plan_ready" in event_types
 
 
 @pytest.mark.asyncio
@@ -471,22 +468,15 @@ async def test_loop_budget_exceeded(db, monkeypatch):
     monkeypatch.setattr("backend.config.settings.harness_loop_max_steps", 2)
     registry, execution_skill, recipe_skill = _registry()
 
-    from backend.harness.schemas import LeadDecision
     from backend.harness.builder import GraphDraftBuilder
 
     # Avoid validation so we can test force-commit path with an empty graph
     monkeypatch.setattr(GraphDraftBuilder, "_commit_graph", lambda self: setattr(self.draft, "committed", True))
 
-    # LLM never returns done and never drafts recipe (which auto-commits)
-    decisions = [
-        LeadDecision(action={"kind": "planning_update", "text": "第1步"}, reasoning="第1步"),
-        LeadDecision(action={"kind": "planning_update", "text": "第2步"}, reasoning="第2步"),
-    ]
-    fake_llm = FakeLoopLLMClient(decisions=decisions)
     orchestrator = HarnessOrchestrator(
         db,
         registry=registry,
-        lead_agent=LeadAgent(registry, db=db, llm=fake_llm),
+        lead_agent=LeadAgent(registry, db=db),
         enable_subagents=False,
     )
 
@@ -494,13 +484,21 @@ async def test_loop_budget_exceeded(db, monkeypatch):
     async def on_event(event):
         events.append(event)
 
-    goal = "请帮我做一个完整的知识库播客工作流"
-    result = await orchestrator.run(goal, on_event=on_event)
-    assert result.route == "harness"
-    # Should force commit after budget exceeded
-    assert any("强制提交" in str(e.get("text", "")) for e in events)
-    assert "workflow_built" in [e["type"] for e in events]
-    assert "plan_ready" in [e["type"] for e in events]
+    with mock.patch.object(
+        LeadAgent,
+        "decide",
+        side_effect=[
+            ProposeActionDecision(action={"kind": "planning_update", "text": "第1步"}),
+            ProposeActionDecision(action={"kind": "planning_update", "text": "第2步"}),
+        ],
+    ):
+        goal = "请帮我做一个完整的知识库播客工作流"
+        result = await orchestrator.run(goal, on_event=on_event)
+        assert result.route == "harness"
+        # Should force commit after budget exceeded
+        assert any("强制提交" in str(e.get("text", "")) for e in events)
+        assert "workflow_built" in [e["type"] for e in events]
+        assert "plan_ready" in [e["type"] for e in events]
 
 
 @pytest.mark.asyncio
@@ -541,29 +539,10 @@ async def test_loop_observation_drives_next_decision(db, monkeypatch):
     monkeypatch.setattr("backend.config.settings.harness_loop_enabled", True)
     registry, execution_skill, recipe_skill = _registry()
 
-    from backend.harness.schemas import LeadDecision
-    from backend.harness import prompts
-
-    decisions = [
-        LeadDecision(skill="draft_recipe", reasoning="第1步 draft"),
-        LeadDecision(done=True, reasoning="收到 observation 后结束"),
-    ]
-    fake_llm = FakeLoopLLMClient(decisions=decisions)
-
-    captured_histories = []
-    original_build_user_prompt = prompts.build_lead_decision_user_prompt
-
-    def patched_build_user_prompt(*, history=None, **kwargs):
-        # copy history list so later mutations don't affect captured snapshot
-        captured_histories.append(list(history) if history is not None else None)
-        return original_build_user_prompt(history=history, **kwargs)
-
-    monkeypatch.setattr("backend.harness.prompts.build_lead_decision_user_prompt", patched_build_user_prompt)
-
     orchestrator = HarnessOrchestrator(
         db,
         registry=registry,
-        lead_agent=LeadAgent(registry, db=db, llm=fake_llm),
+        lead_agent=LeadAgent(registry, db=db),
         enable_subagents=False,
     )
 
@@ -571,16 +550,32 @@ async def test_loop_observation_drives_next_decision(db, monkeypatch):
     async def on_event(event):
         events.append(event)
 
-    goal = "请帮我做一个完整的知识库播客工作流"
-    result = await orchestrator.run(goal, on_event=on_event)
-    assert result.route == "harness"
+    captured_calls = []
+
+    async def patched_decide_with_llm(self, goal, *, route, **kwargs):
+        # Copy mutable lists so later mutations don't affect captured snapshot
+        captured_calls.append({
+            **kwargs,
+            "history": list(kwargs["history"]) if kwargs.get("history") is not None else None,
+            "tool_results": list(kwargs["tool_results"]) if kwargs.get("tool_results") is not None else None,
+        })
+        if len(captured_calls) == 1:
+            return ProposeActionDecision(action={"kind": "planning_update", "text": "第1步"})
+        return FinalizeDecision(reasoning="收到 observation 后结束")
+
+    with mock.patch.object(LeadAgent, "_decide_with_llm", patched_decide_with_llm):
+        goal = "请帮我做一个完整的知识库播客工作流"
+        result = await orchestrator.run(goal, on_event=on_event)
+        assert result.route == "harness"
 
     # There should be 2 decide calls; second one should receive non-empty history
-    assert len(captured_histories) == 2
-    assert captured_histories[0] == [] or captured_histories[0] is None
-    assert len(captured_histories[1]) == 1
-    obs = captured_histories[1][0]
-    assert obs.action_taken == "draft_recipe"
+    assert len(captured_calls) == 2
+    assert captured_calls[0].get("history") == [] or captured_calls[0].get("history") is None
+    assert "tool_results" in captured_calls[0]
+    assert len(captured_calls[1].get("history", [])) == 1
+    assert "tool_results" in captured_calls[1]
+    obs = captured_calls[1]["history"][0]
+    assert obs.action_taken == "planningupdate"
     assert obs.success is True
 
 import pytest
@@ -598,3 +593,27 @@ async def test_list_providers_tool_returns_details():
     for p in result.llm_providers:
         assert p.id is not None
         assert p.name
+
+
+@pytest.mark.asyncio
+async def test_build_with_loop_uses_list_providers_tool(db, monkeypatch):
+    monkeypatch.setattr("backend.config.settings.harness_loop_enabled", True)
+    registry, _, _ = _registry()
+    from backend.harness.schemas import CallToolDecision, FinalizeDecision
+    from backend.harness.lead_agent import LeadAgent
+
+    orchestrator = HarnessOrchestrator(db, registry=registry, lead_agent=LeadAgent(registry, db=db))
+    with mock.patch.object(
+        LeadAgent, "decide", side_effect=[
+            CallToolDecision(name="list_providers", arguments={"type": "all", "detailed": False}),
+            FinalizeDecision(reasoning="已获取提供商信息，提交"),
+        ]
+    ):
+        context = await orchestrator.build("请帮我做一个完整的知识库播客工作流")
+        events = context.events
+        tool_calls = [e for e in events if e["type"] == "tool_call"]
+        tool_results = [e for e in events if e["type"] == "tool_result"]
+        assert len(tool_calls) == 1
+        assert tool_calls[0]["name"] == "list_providers"
+        assert len(tool_results) == 1
+        assert tool_results[0]["ok"] is True
