@@ -9,6 +9,13 @@ const NODE_GROUPS = [
     ],
   },
   {
+    label: '控制流',
+    items: [
+      { type: 'if_else' as NodeType, icon: '◈', label: 'If-Else 分支', color: 'bg-amber-500' },
+      { type: 'iteration' as NodeType, icon: '↻', label: 'Iteration 循环', color: 'bg-cyan-500' },
+    ],
+  },
+  {
     label: '大模型',
     items: [
       { type: 'llm' as NodeType, icon: '🧠', label: 'LLM 对话', color: 'bg-purple-500' },

@@ -11,6 +11,8 @@ const NODE_OUTPUT_FIELDS: Record<NodeType, string[]> = {
   agent: ['text', 'steps'],
   tts: ['audio_url', 'duration'],
   end: [],
+  if_else: ['branchTaken', 'result'],
+  iteration: ['results', 'errors'],
 }
 
 const NODE_REFERENCE_PATTERN = /^\{\{([^\s.]+)\./
@@ -93,6 +95,14 @@ export function NodeConfig() {
       {data.nodeType === 'agent' && (
         <AgentNodeConfig config={config} updateConfig={updateConfig} updateConfigBatch={updateConfigBatch} />
       )}
+
+      {data.nodeType === 'if_else' && (
+        <IfElseNodeConfig config={config} updateConfig={updateConfig} />
+      )}
+
+      {data.nodeType === 'iteration' && (
+        <IterationNodeConfig config={config} updateConfig={updateConfig} />
+      )}
     </div>
   )
 }
@@ -104,7 +114,7 @@ function StartNodeConfig({
   config: Record<string, unknown>
   updateConfig: (key: string, value: unknown) => void
 }) {
-  const inputs = (config.inputs as StartInputField[]) || []
+  const inputs: StartInputField[] = Array.isArray(config.inputs) ? (config.inputs as StartInputField[]) : []
 
   const addField = () => {
     updateConfig('inputs', [
@@ -213,7 +223,7 @@ function EndNodeConfig({
   currentNodeId: string
 }) {
   const { nodes } = useWorkflowStore()
-  const outputs = (config.outputs as EndOutputField[]) || []
+  const outputs: EndOutputField[] = Array.isArray(config.outputs) ? (config.outputs as EndOutputField[]) : []
   const answer = (config.answer as string) || ''
   const answerRef = useRef<HTMLTextAreaElement>(null)
 
@@ -221,7 +231,8 @@ function EndNodeConfig({
 
   const getNodeFields = (nodeType: string, nodeId: string): string[] => {
     if (nodeType === 'start') {
-      const startInputs = (nodes.find((n) => n.id === nodeId)?.data.config.inputs as StartInputField[]) || []
+      const rawInputs = nodes.find((n) => n.id === nodeId)?.data.config.inputs
+      const startInputs: StartInputField[] = Array.isArray(rawInputs) ? (rawInputs as StartInputField[]) : []
       return startInputs.map((i) => i.name)
     }
     return NODE_OUTPUT_FIELDS[nodeType as keyof typeof NODE_OUTPUT_FIELDS] || []
@@ -740,5 +751,175 @@ function AgentNodeConfig({
         />
       </label>
     </>
+  )
+}
+
+function IfElseNodeConfig({
+  config,
+  updateConfig,
+}: {
+  config: Record<string, unknown>
+  updateConfig: (key: string, value: unknown) => void
+}) {
+  const rawBranches = Array.isArray(config.branches) ? config.branches : []
+  const branches = (rawBranches.length ? rawBranches : [
+    { id: 'true', condition: { left: '', op: 'eq', right: '' }, outputField: '' },
+    { id: 'false', condition: null, outputField: '' },
+  ]) as Array<{
+    id: string
+    condition?: { left: string; op: string; right: string } | null
+    outputField?: string
+  }>
+
+  const updateBranch = (index: number, patch: Record<string, unknown>) => {
+    const next = [...branches]
+    next[index] = { ...next[index], ...patch }
+    updateConfig('branches', next)
+  }
+
+  const updateCondition = (index: number, patch: Record<string, unknown>) => {
+    const branch = branches[index]
+    const condition = { ...(branch.condition || { left: '', op: 'eq', right: '' }), ...patch }
+    updateBranch(index, { condition })
+  }
+
+  const ops = [
+    { value: 'eq', label: '等于' },
+    { value: 'ne', label: '不等于' },
+    { value: 'contains', label: '包含' },
+    { value: 'not_contains', label: '不包含' },
+    { value: 'gt', label: '大于' },
+    { value: 'lt', label: '小于' },
+    { value: 'is_empty', label: '为空' },
+    { value: 'is_not_empty', label: '不为空' },
+  ]
+
+  return (
+    <div className="space-y-4">
+      {branches.map((branch, idx) => (
+        <div key={branch.id} className="bg-slate-800 border border-slate-700 rounded-md p-2.5 space-y-2">
+          <div className="text-xs text-slate-500 font-medium">
+            {branch.id === 'true' ? 'True 分支' : 'False 分支'}
+          </div>
+
+          {branch.id === 'true' && (
+            <>
+              <div className="grid grid-cols-[1fr,auto,1fr] gap-2">
+                <input
+                  value={branch.condition?.left || ''}
+                  onChange={(e) => updateCondition(idx, { left: e.target.value })}
+                  placeholder="{{node.field}}"
+                  className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200"
+                />
+                <select
+                  value={branch.condition?.op || 'eq'}
+                  onChange={(e) => updateCondition(idx, { op: e.target.value })}
+                  className="bg-slate-900 border border-slate-700 rounded px-1 py-1 text-xs text-slate-200"
+                >
+                  {ops.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+                <input
+                  value={branch.condition?.right || ''}
+                  onChange={(e) => updateCondition(idx, { right: e.target.value })}
+                  placeholder="值"
+                  className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200"
+                />
+              </div>
+            </>
+          )}
+
+          <label className="block">
+            <span className="text-[10px] text-slate-400 block mb-1">输出字段 (nodeId.field)</span>
+            <input
+              value={branch.outputField || ''}
+              onChange={(e) => updateBranch(idx, { outputField: e.target.value })}
+              placeholder="例如: echo_1.text"
+              className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200"
+            />
+          </label>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function IterationNodeConfig({
+  config,
+  updateConfig,
+}: {
+  config: Record<string, unknown>
+  updateConfig: (key: string, value: unknown) => void
+}) {
+  return (
+    <div className="space-y-4">
+      <label className="block">
+        <span className="text-xs text-slate-400 block mb-1">输入引用 (数组)</span>
+        <input
+          value={(config.inputRef as string) || ''}
+          onChange={(e) => updateConfig('inputRef', e.target.value)}
+          placeholder="{{start_1.items}}"
+          className="w-full bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-sm text-slate-200"
+        />
+      </label>
+
+      <div className="grid grid-cols-2 gap-3">
+        <label className="block">
+          <span className="text-xs text-slate-400 block mb-1">项变量名</span>
+          <input
+            value={(config.itemVar as string) || 'item'}
+            onChange={(e) => updateConfig('itemVar', e.target.value)}
+            className="w-full bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-sm text-slate-200"
+          />
+        </label>
+        <label className="block">
+          <span className="text-xs text-slate-400 block mb-1">索引变量名</span>
+          <input
+            value={(config.indexVar as string) || 'index'}
+            onChange={(e) => updateConfig('indexVar', e.target.value)}
+            className="w-full bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-sm text-slate-200"
+          />
+        </label>
+      </div>
+
+      <label className="block">
+        <span className="text-xs text-slate-400 block mb-1">输出字段 (nodeId.field)</span>
+        <input
+          value={(config.outputField as string) || ''}
+          onChange={(e) => updateConfig('outputField', e.target.value)}
+          placeholder="例如: echo_1.text"
+          className="w-full bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-sm text-slate-200"
+        />
+      </label>
+
+      <label className="block">
+        <span className="text-xs text-slate-400 block mb-1">
+          最大并发度: {(config.maxConcurrency as number) || 5}
+        </span>
+        <input
+          type="range"
+          min={1}
+          max={10}
+          step={1}
+          value={(config.maxConcurrency as number) || 5}
+          onChange={(e) => updateConfig('maxConcurrency', parseInt(e.target.value, 10))}
+          className="w-full"
+        />
+      </label>
+
+      <label className="block">
+        <span className="text-xs text-slate-400 block mb-1">错误策略</span>
+        <select
+          value={(config.errorStrategy as string) || 'fail_fast'}
+          onChange={(e) => updateConfig('errorStrategy', e.target.value)}
+          className="w-full bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-sm text-slate-200"
+        >
+          <option value="fail_fast">快速失败</option>
+          <option value="continue">继续执行</option>
+          <option value="ignore_error_output">忽略错误</option>
+        </select>
+      </label>
+    </div>
   )
 }

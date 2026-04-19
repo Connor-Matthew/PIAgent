@@ -3,10 +3,16 @@ import type { NodeExecutionState, SSEEvent, StreamProgressDelta } from '../types
 
 type DebugMode = 'simple' | 'detailed'
 
+function compositeKey(nodeId: string, iterationIndex?: number | null): string {
+  return iterationIndex != null ? `${nodeId}#${iterationIndex}` : `${nodeId}#0`
+}
+
 interface DebugState {
   isOpen: boolean
   mode: DebugMode
   isRunning: boolean
+  workflowId: string | null
+  runId: string | null
   inputText: string
   runInputs: Record<string, unknown>
   nodeStates: Map<string, NodeExecutionState>
@@ -23,19 +29,27 @@ interface DebugState {
   setRunInput: (name: string, value: unknown) => void
   setRunInputs: (inputs: Record<string, unknown>) => void
   startRun: () => void
+  attachRun: (workflowId: string, runId: string) => void
   finishRun: (patch?: {
     duration?: number | null
     finalAnswer?: string | null
     finalOutputs?: Record<string, unknown> | null
   }) => void
+  markStopped: (message?: string) => void
   handleSSEEvent: (event: SSEEvent) => void
   reset: () => void
+
+  // Helpers for control-flow aware state access
+  getNodeState: (nodeId: string, iterationIndex?: number) => NodeExecutionState | undefined
+  getAggregatedNodeStatus: (nodeId: string) => NodeExecutionState['status'] | undefined
 }
 
 export const useDebugStore = create<DebugState>((set, get) => ({
   isOpen: false,
   mode: 'detailed',
   isRunning: false,
+  workflowId: null,
+  runId: null,
   inputText: '',
   runInputs: {},
   nodeStates: new Map(),
@@ -62,6 +76,8 @@ export const useDebugStore = create<DebugState>((set, get) => ({
   startRun: () =>
     set({
       isRunning: true,
+      workflowId: null,
+      runId: null,
       nodeStates: new Map(),
       audioUrl: null,
       totalDuration: null,
@@ -69,19 +85,37 @@ export const useDebugStore = create<DebugState>((set, get) => ({
       finalOutputs: null,
     }),
 
+  attachRun: (workflowId, runId) =>
+    set({
+      workflowId,
+      runId,
+    }),
+
   finishRun: (patch) =>
     set({
       isRunning: false,
+      workflowId: null,
+      runId: null,
       totalDuration: patch?.duration ?? get().totalDuration,
       finalAnswer: patch?.finalAnswer ?? get().finalAnswer,
       finalOutputs: patch?.finalOutputs ?? get().finalOutputs,
+    }),
+
+  markStopped: (message) =>
+    set({
+      isRunning: false,
+      workflowId: null,
+      runId: null,
+      finalAnswer: message ?? '已手动停止执行',
+      finalOutputs: null,
     }),
 
   handleSSEEvent: (event) => {
     const states = new Map(get().nodeStates)
 
     if (event.type === 'node_start' && event.node_id) {
-      states.set(event.node_id, {
+      const key = compositeKey(event.node_id, event.iteration_index)
+      states.set(key, {
         nodeId: event.node_id,
         nodeType: event.node_type,
         status: 'running',
@@ -91,7 +125,8 @@ export const useDebugStore = create<DebugState>((set, get) => ({
     }
 
     if (event.type === 'node_stream' && event.node_id) {
-      const existing = states.get(event.node_id) ?? {
+      const key = compositeKey(event.node_id, event.iteration_index)
+      const existing = states.get(key) ?? {
         nodeId: event.node_id,
         nodeType: event.node_type,
         status: 'running' as const,
@@ -113,12 +148,13 @@ export const useDebugStore = create<DebugState>((set, get) => ({
         existing.lastSeq = event.seq
       }
 
-      states.set(event.node_id, { ...existing })
+      states.set(key, { ...existing })
       set({ nodeStates: states })
     }
 
     if (event.type === 'node_heartbeat' && event.node_id) {
-      const existing = states.get(event.node_id) ?? {
+      const key = compositeKey(event.node_id, event.iteration_index)
+      const existing = states.get(key) ?? {
         nodeId: event.node_id,
         nodeType: event.node_type,
         status: 'running' as const,
@@ -126,12 +162,13 @@ export const useDebugStore = create<DebugState>((set, get) => ({
       }
       existing.heartbeatElapsed = event.elapsed
       existing.heartbeatMessage = event.message
-      states.set(event.node_id, { ...existing })
+      states.set(key, { ...existing })
       set({ nodeStates: states })
     }
 
     if (event.type === 'node_end' && event.node_id) {
-      const existing = states.get(event.node_id) ?? {
+      const key = compositeKey(event.node_id, event.iteration_index)
+      const existing = states.get(key) ?? {
         nodeId: event.node_id,
         nodeType: event.node_type,
         status: 'running' as const,
@@ -154,16 +191,19 @@ export const useDebugStore = create<DebugState>((set, get) => ({
       } else if (output.answer) {
         existing.output = String(output.answer)
       }
-      states.set(event.node_id, { ...existing })
+      states.set(key, { ...existing })
       set({ nodeStates: states })
     }
 
     if (event.type === 'workflow_end') {
+      const isCancelled = event.status === 'cancelled'
       set({
         isRunning: false,
+        workflowId: null,
+        runId: null,
         totalDuration: event.duration ?? null,
-        finalAnswer: event.answer ?? null,
-        finalOutputs: event.outputs ?? null,
+        finalAnswer: isCancelled ? (event.message ?? '已手动停止执行') : (event.answer ?? null),
+        finalOutputs: isCancelled ? null : (event.outputs ?? null),
       })
       // Also derive audio_url from final outputs if present
       if (event.outputs?.audio_url) {
@@ -172,9 +212,33 @@ export const useDebugStore = create<DebugState>((set, get) => ({
     }
   },
 
+  getNodeState: (nodeId, iterationIndex) => {
+    return get().nodeStates.get(compositeKey(nodeId, iterationIndex))
+  },
+
+  getAggregatedNodeStatus: (nodeId) => {
+    const states = get().nodeStates
+    let hasRunning = false
+    let hasFailed = false
+    let hasCompleted = false
+    for (const [key, state] of states) {
+      if (key.startsWith(`${nodeId}#`)) {
+        if (state.status === 'running') hasRunning = true
+        if (state.status === 'failed') hasFailed = true
+        if (state.status === 'completed') hasCompleted = true
+      }
+    }
+    if (hasRunning) return 'running'
+    if (hasFailed) return 'failed'
+    if (hasCompleted) return 'completed'
+    return undefined
+  },
+
   reset: () =>
     set({
       isRunning: false,
+      workflowId: null,
+      runId: null,
       nodeStates: new Map(),
       audioUrl: null,
       totalDuration: null,

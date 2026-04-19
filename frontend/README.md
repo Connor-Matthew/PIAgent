@@ -6,8 +6,8 @@ PIAgent 是一个可视化 AI Agent 工作流编排平台，支持通过拖拽�
 
 ## 技术栈
 
-- **后端**: Python 3.12 + FastAPI + LangGraph + SQLAlchemy + SQLite + Chroma
-- **前端**: Vite + React 18 + TypeScript + TailwindCSS + React Flow + Zustand
+- **后端**: Python 3.14 + FastAPI + LangGraph + SQLAlchemy + SQLite + Chroma
+- **前端**: Vite + React 19 + TypeScript + TailwindCSS + React Flow + Zustand
 
 ## 核心特性
 
@@ -24,9 +24,8 @@ PIAgent 是一个可视化 AI Agent 工作流编排平台，支持通过拖拽�
 ### 1. 安装依赖
 
 ```bash
-# 后端
-python -m venv .venv
-source .venv/bin/activate
+# 后端（仓库已使用 backend/.venv）
+source backend/.venv/bin/activate
 pip install -r backend/requirements.txt
 
 # 前端
@@ -37,15 +36,15 @@ npm install
 ### 2. 环境变量
 
 ```bash
-cp backend/.env.example backend/.env
-# 编辑 .env，填入各厂商 API Key
+# 在仓库根目录创建或编辑 .env，填入各厂商 API Key
 ```
 
 ### 3. 启动服务
 
 ```bash
-# 后端
-python -m backend.main
+# 后端（从仓库根目录运行）
+source backend/.venv/bin/activate
+uvicorn backend.main:app --reload --port 8000
 
 # 前端（新终端）
 cd frontend
@@ -106,14 +105,20 @@ pytest -q
 - `GET /api/workflows/{id}/runs/{run_id}/events` - SSE 事件流
 
 ### 提供商
-- `GET /api/providers` - 列出可用 LLM 提供商
-- `GET /api/providers/{name}/models` - 列出模型
-- `POST /api/providers/{name}/test` - 测试连接
+- `GET /api/providers` - 列出可用提供商
+- `GET /api/providers/{id}/models` - 列出模型
+- `POST /api/providers/{id}/test` - 测试连接
 
 ### 知识库
 - `POST /api/knowledge-bases` - 创建知识库
 - `POST /api/knowledge-bases/{id}/upload` - 上传文档
 - `POST /api/knowledge-bases/{id}/query` - 查询知识库
+
+### Harness
+- `POST /api/harness/sessions` - 创建自然语言建图会话
+- `GET /api/harness/sessions/{id}/events` - Harness SSE 事件流
+- `POST /api/harness/sessions/{id}/resume` - 回答澄清问题
+- `POST /api/harness/sessions/{id}/apply` - 应用草案到工作流
 
 ## 开发计划
 

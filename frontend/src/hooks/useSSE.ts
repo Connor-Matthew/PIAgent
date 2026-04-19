@@ -2,18 +2,21 @@ import { useCallback, useRef } from 'react'
 import { useDebugStore } from '../stores/debugStore'
 import type { SSEEvent } from '../types/workflow'
 
+let activeEventSource: EventSource | null = null
+
 export function useSSE() {
-  const eventSourceRef = useRef<EventSource | null>(null)
+  const eventSourceRef = useRef<EventSource | null>(activeEventSource)
   const handleEvent = useDebugStore((s) => s.handleSSEEvent)
 
   const connect = useCallback(
     (workflowId: string, runId: string) => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close()
+      if (activeEventSource) {
+        activeEventSource.close()
       }
 
       const url = `/api/workflows/${workflowId}/runs/${runId}/events`
       const es = new EventSource(url)
+      activeEventSource = es
       eventSourceRef.current = es
 
       const handleMessage = () => (event: MessageEvent) => {
@@ -29,17 +32,30 @@ export function useSSE() {
         const data: SSEEvent = JSON.parse(event.data)
         handleEvent(data)
         es.close()
+        if (activeEventSource === es) {
+          activeEventSource = null
+        }
+        if (eventSourceRef.current === es) {
+          eventSourceRef.current = null
+        }
       })
 
       es.onerror = () => {
         es.close()
+        if (activeEventSource === es) {
+          activeEventSource = null
+        }
+        if (eventSourceRef.current === es) {
+          eventSourceRef.current = null
+        }
       }
     },
     [handleEvent]
   )
 
   const disconnect = useCallback(() => {
-    eventSourceRef.current?.close()
+    activeEventSource?.close()
+    activeEventSource = null
     eventSourceRef.current = null
   }, [])
 

@@ -22,7 +22,8 @@ export function DebugDrawer() {
 
   const startInputs = useMemo<StartInputField[]>(() => {
     const config = startNode?.data.config || {}
-    return (config.inputs as StartInputField[]) || []
+    const raw = config.inputs
+    return Array.isArray(raw) ? (raw as StartInputField[]) : []
   }, [startNode])
 
   if (!isOpen) return null

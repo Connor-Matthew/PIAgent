@@ -29,11 +29,13 @@ interface WorkflowState {
   workflowId: string | null
   workflowName: string
   isDraft: boolean
+  isHarnessLocked: boolean
 
   onNodesChange: OnNodesChange
   onEdgesChange: OnEdgesChange
   onConnect: OnConnect
   addNode: (node: WorkflowNodeInput) => void
+  addChildNode: (parentId: string, nodeType: NodeType, position: { x: number; y: number }) => void
   addGraphEdge: (edge: WorkflowEdgeInput) => void
   startDraftBuild: (name: string) => void
   setSelectedNode: (id: string | null) => void
@@ -41,8 +43,10 @@ interface WorkflowState {
   patchNodeConfig: (id: string, patch: Record<string, unknown>) => void
   setAllNodeVisuals: (patch: Pick<WorkflowNodeData, 'visualState' | 'visualLabel' | 'statusNote'> | Partial<Pick<WorkflowNodeData, 'visualState' | 'visualLabel' | 'statusNote'>>) => void
   setWorkflow: (id: string, name: string, nodes: WorkflowNodeInput[], edges: WorkflowEdgeInput[]) => void
+  setDraftSnapshot: (name: string, nodes: WorkflowNodeInput[], edges: WorkflowEdgeInput[]) => void
   setDraftWorkflow: (name: string, nodes: WorkflowNodeInput[], edges: WorkflowEdgeInput[]) => void
   deleteEdge: (edgeId: string) => void
+  setHarnessLocked: (locked: boolean) => void
   toGraphJSON: () => WorkflowGraph
 }
 
@@ -107,7 +111,9 @@ function getNodeConfig(rawData: Record<string, unknown>) {
   }
 
   return Object.fromEntries(
-    Object.entries(rawData).filter(([key]) => !['label', 'nodeType', 'locked'].includes(key))
+    Object.entries(rawData).filter(
+      ([key]) => !['label', 'nodeType', 'locked', 'parentId', 'branchId'].includes(key)
+    )
   )
 }
 
@@ -119,10 +125,17 @@ function normalizeGraphNode(input: WorkflowNodeInput) {
     isStartOrEnd(nodeType) || (typeof rawData.locked === 'boolean' ? rawData.locked : undefined)
   const config = getNodeConfig(rawData)
 
+  // Map backend parentId <=> React Flow parentNode + extent
+  const parentNode =
+    (input as any).parentNode || (typeof rawData.parentId === 'string' ? rawData.parentId : undefined)
+  const extent = parentNode ? ('parent' as const) : undefined
+
   return {
     id: input.id,
     type: input.type || nodeType,
     position: input.position || { x: 0, y: 0 },
+    parentNode,
+    extent,
     data: {
       label,
       nodeType,
@@ -142,6 +155,7 @@ function normalizeGraphEdge(input: WorkflowEdgeInput) {
     animated: input.animated,
     label: input.label,
     markerEnd: input.markerEnd,
+    sourceHandle: (input as any).sourceHandle,
   } satisfies Edge
 }
 
@@ -170,21 +184,50 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   workflowId: null,
   workflowName: 'Untitled Workflow',
   isDraft: false,
+  isHarnessLocked: false,
 
   onNodesChange: (changes) => {
+    if (get().isHarnessLocked) return
     const lockedIds = new Set(get().nodes.filter((n) => n.data.locked).map((n) => n.id))
+
+    // Collect IDs being removed
+    const removeIds = new Set(changes.filter((c) => c.type === 'remove').map((c) => c.id))
+
+    // Cascade: also remove children whose parentNode is in removeIds
+    const childIds = get().nodes
+      .filter((n) => n.parentNode && removeIds.has(n.parentNode))
+      .map((n) => n.id)
+    childIds.forEach((id) => removeIds.add(id))
+
     const allowedChanges = changes.filter((c) => {
       if (c.type === 'remove' && lockedIds.has(c.id)) return false
       return true
     })
-    set({ nodes: applyNodeChanges(allowedChanges, get().nodes) })
+
+    // Append cascade removes for children (skip locked)
+    const cascadeChanges = childIds
+      .filter((id) => !lockedIds.has(id))
+      .map((id) => ({ type: 'remove' as const, id }))
+
+    const newNodes = applyNodeChanges([...allowedChanges, ...cascadeChanges], get().nodes)
+
+    // Clean up edges connected to removed nodes
+    const newEdges = get().edges.filter(
+      (e) => !removeIds.has(e.source) && !removeIds.has(e.target)
+    )
+
+    set({ nodes: newNodes, edges: newEdges })
   },
 
-  onEdgesChange: (changes) =>
-    set({ edges: applyEdgeChanges(changes, get().edges) }),
+  onEdgesChange: (changes) => {
+    if (get().isHarnessLocked) return
+    set({ edges: applyEdgeChanges(changes, get().edges) })
+  },
 
-  onConnect: (connection) =>
-    set({ edges: addEdgeToState(connection, get().edges) }),
+  onConnect: (connection) => {
+    if (get().isHarnessLocked) return
+    set({ edges: addEdgeToState(connection, get().edges) })
+  },
 
   deleteEdge: (edgeId: string) =>
     set({ edges: get().edges.filter((e) => e.id !== edgeId) }),
@@ -196,6 +239,27 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
         return state
       }
       return { nodes: [...state.nodes, normalized] }
+    }),
+
+  addChildNode: (parentId, nodeType, position) =>
+    set((state) => {
+      const parent = state.nodes.find((n) => n.id === parentId)
+      if (!parent) return state
+      const id = `${nodeType}_${Date.now()}_${Math.floor(Math.random() * 1000)}`
+      const child: Node<WorkflowNodeData> = {
+        id,
+        type: nodeType,
+        position,
+        parentNode: parentId,
+        extent: 'parent',
+        data: {
+          label: nodeType,
+          nodeType,
+          locked: false,
+          config: {},
+        },
+      }
+      return { nodes: [...state.nodes, child] }
     }),
 
   addGraphEdge: (edge) =>
@@ -267,6 +331,16 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     set({ workflowId: id, workflowName: name, nodes, edges: normalizeGraphEdges(edges), isDraft: false })
   },
 
+  setDraftSnapshot: (name, graphNodes, edges) =>
+    set({
+      workflowId: null,
+      workflowName: name,
+      nodes: graphNodes.map((node) => normalizeGraphNode(node)),
+      edges: normalizeGraphEdges(edges),
+      isDraft: true,
+      selectedNodeId: null,
+    }),
+
   setDraftWorkflow: (name, graphNodes, edges) => {
     const nodes = normalizeGraphNodes(graphNodes)
     set({
@@ -279,6 +353,8 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     })
   },
 
+  setHarnessLocked: (locked) => set({ isHarnessLocked: locked }),
+
   toGraphJSON: () => {
     const { nodes, edges } = get()
     return {
@@ -290,12 +366,14 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
           label: n.data.label,
           nodeType: n.data.nodeType,
           locked: n.data.locked,
+          ...(n.parentNode ? { parentId: n.parentNode } : {}),
           ...n.data.config,
         },
       })),
       edges: edges.map((e) => ({
         source: e.source,
         target: e.target,
+        ...(e.sourceHandle ? { sourceHandle: e.sourceHandle } : {}),
       })),
     } as WorkflowGraph
   },

@@ -1,4 +1,4 @@
-export type NodeType = 'start' | 'llm' | 'rag' | 'agent' | 'tts' | 'end'
+export type NodeType = 'start' | 'llm' | 'rag' | 'agent' | 'tts' | 'end' | 'if_else' | 'iteration'
 export type NodeVisualState = 'idle' | 'building' | 'running' | 'completed' | 'failed'
 
 export type InputFieldType = 'text' | 'number' | 'select' | 'file'
@@ -43,6 +43,7 @@ export interface WorkflowGraph {
     id?: string
     source: string
     target: string
+    sourceHandle?: string
   }>
 }
 
@@ -79,7 +80,16 @@ export interface StreamProgressDelta {
 }
 
 export interface SSEEvent {
-  type: 'workflow_start' | 'node_start' | 'node_stream' | 'node_heartbeat' | 'node_end' | 'workflow_end'
+  type:
+    | 'workflow_start'
+    | 'node_start'
+    | 'node_stream'
+    | 'node_heartbeat'
+    | 'node_end'
+    | 'branch_taken'
+    | 'iteration_item_start'
+    | 'iteration_item_end'
+    | 'workflow_end'
   node_id?: string
   node_type?: string
   status?: string
@@ -92,4 +102,9 @@ export interface SSEEvent {
   answer?: string
   outputs?: Record<string, unknown>
   error?: string
+  branch_id?: string
+  condition_result?: boolean
+  index?: number
+  total?: number
+  iteration_index?: number
 }

@@ -27,6 +27,8 @@ def _ensure_agent_session_schema(db_engine: Engine):
         column["name"] for column in inspector.get_columns("agent_sessions")
     }
     missing_columns = {
+        "goal": "TEXT NOT NULL DEFAULT ''",
+        "workspace_json": "TEXT NOT NULL DEFAULT '{}'",
         "answered_dims_json": "TEXT NOT NULL DEFAULT '{}'",
         "events_json": "TEXT NOT NULL DEFAULT '[]'",
     }
@@ -41,6 +43,32 @@ def _ensure_agent_session_schema(db_engine: Engine):
                 )
             )
         logger.info("Added missing column %s to agent_sessions", column_name)
+
+    if "user_goal" in existing_columns:
+        with db_engine.begin() as conn:
+            conn.execute(
+                text(
+                    """
+                    UPDATE agent_sessions
+                    SET goal = user_goal
+                    WHERE COALESCE(goal, '') = ''
+                    """
+                )
+            )
+        logger.info("Backfilled agent_sessions.goal from legacy user_goal column")
+
+    if "workspace_json" in existing_columns or "workspace_json" in missing_columns:
+        with db_engine.begin() as conn:
+            conn.execute(
+                text(
+                    """
+                    UPDATE agent_sessions
+                    SET workspace_json = '{}'
+                    WHERE workspace_json IS NULL
+                    """
+                )
+            )
+        logger.info("Normalized empty agent_sessions.workspace_json values")
 
 
 def _ensure_secret_key():
@@ -125,11 +153,11 @@ app.mount("/audio", StaticFiles(directory=settings.audio_dir), name="audio")
 from backend.api.workflows import router as workflows_router
 from backend.api.knowledge import router as knowledge_router
 from backend.api.providers import router as providers_router
-from backend.api.agent import router as agent_router
+from backend.api.harness import router as harness_router
 app.include_router(workflows_router)
 app.include_router(knowledge_router)
 app.include_router(providers_router)
-app.include_router(agent_router)
+app.include_router(harness_router)
 
 
 @app.get("/api/health")

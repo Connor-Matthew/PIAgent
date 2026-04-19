@@ -14,7 +14,12 @@ class Settings(BaseSettings):
     secret_key: SecretStr = ""
     upload_dir: str = "./uploads"
     cors_origins: list[str] = ["http://localhost:5173"]
-    agent_llm_enabled: bool = False
+    agent_llm_enabled: bool = True
+    agent_llm_timeout_seconds: float = 60.0
+    agent_llm_provider_id: int | None = None
+    agent_llm_model: str | None = None
+    harness_loop_enabled: bool = False
+    harness_loop_max_steps: int = 10
 
     class Config:
         env_file = ".env"

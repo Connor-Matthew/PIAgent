@@ -54,19 +54,19 @@ Key flow: `api/workflows.py` receives run request → creates `WorkflowRun` reco
 
 **Provider system:** LLM providers (OpenAI, Anthropic, Google, DeepSeek) stored in DB as `Provider` model with encrypted API keys (`core/crypto.py` uses Fernet). Provider CRUD at `api/providers.py`. LLM nodes resolve their provider at execution time.
 
-**Agent mode:** `backend/agent/` implements a conversational workflow builder. The `AgentPanel` collects user intent → `clarifier.py` asks follow-up questions → `planner.py` generates a `RecipeIR` → `adapter.py` converts IR to workflow graph JSON. This lets users describe what they want in natural language and get a runnable workflow.
+**Harness mode:** `backend/harness/` implements the natural-language workflow builder. The `AgentPanel` collects a user goal → `/api/harness/sessions` creates a `HarnessSession` → the SSE stream drives the LeadAgent loop → tools and skills gather facts → `GraphBuilder` emits graph updates → `Finalize` validates the draft → `apply` persists the workflow. `/api/agent/*` has been retired.
 
-**API routes:** All under `/api/` prefix — `workflows`, `knowledge`, `providers`, `agent`.
+**API routes:** All under `/api/` prefix — `workflows`, `knowledge`, `providers`, `harness`.
 
 ### Frontend (React / TypeScript / Vite)
 
-**State:** Zustand stores — `workflowStore` (nodes, edges, canvas state), `debugStore` (SSE events, execution state), `agentStore` (agent session).
+**State:** Zustand stores — `workflowStore` (nodes, edges, canvas state), `debugStore` (SSE events, execution state), `harnessStore` (natural-language workflow generation session).
 
 **Layout:** `App.tsx` has two routes: `/` (workflow editor) and `/providers` (provider management). The workflow editor is a 3-column layout: NodeLibrary (left) | Canvas + AgentPanel + DebugDrawer (center) | NodeConfig (right).
 
 **Canvas:** `WorkflowCanvas` uses React Flow. Custom node components live in `components/nodes/`.
 
-**API layer:** `services/api.ts` (workflow CRUD + SSE execution), `services/agentApi.ts` (agent session endpoints).
+**API layer:** `services/api.ts` (workflow CRUD, providers, knowledge), `services/harnessApi.ts` (harness session endpoints + SSE).
 
 ### Database
 
