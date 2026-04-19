@@ -200,3 +200,20 @@ def test_update_workflow_returns_v2_graph(client):
     assert response.status_code == 200
     assert response.json()["graph"]["version"] == 2
 
+
+def test_workflow_api_roundtrips_graph_v2(client):
+    graph = {
+        "nodes": [
+            {"id": "start_1", "type": "start", "data": {}},
+            {"id": "end_1", "type": "end", "data": {}},
+        ],
+        "edges": [{"source": "start_1", "target": "end_1"}],
+    }
+
+    created = client.post("/api/workflows", json={"name": "roundtrip", "graph": graph}).json()
+    fetched = client.get(f"/api/workflows/{created['id']}").json()
+    updated = client.put(f"/api/workflows/{created['id']}", json={"graph": fetched["graph"]}).json()
+
+    assert created["graph"]["version"] == 2
+    assert fetched["graph"]["version"] == 2
+    assert updated["graph"]["version"] == 2
