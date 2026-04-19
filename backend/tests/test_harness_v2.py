@@ -122,7 +122,7 @@ def test_builder_add_node_with_parent_id():
     b.apply(AddNodeAction(node_type="llm", node_id="n1", parent_id="if1"))
     snap = b.snapshot()
     n1 = next(n for n in snap["nodes"] if n["id"] == "n1")
-    assert n1["data"]["parentId"] == "if1"
+    assert n1["parentId"] == "if1"
 
 
 def test_builder_delete_node_cascades_children():
@@ -182,7 +182,7 @@ def test_validator_cross_scope_edge():
         "nodes": [
             {"id": "s1", "type": "start"},
             {"id": "if1", "type": "if_else"},
-            {"id": "n1", "type": "llm", "data": {"parentId": "if1"}},
+            {"id": "n1", "type": "llm", "parentId": "if1"},
             {"id": "e1", "type": "end"},
         ],
         "edges": [
@@ -200,8 +200,8 @@ def test_validator_subgraph_cycle():
         "nodes": [
             {"id": "s1", "type": "start"},
             {"id": "if1", "type": "if_else"},
-            {"id": "n1", "type": "llm", "data": {"parentId": "if1"}},
-            {"id": "n2", "type": "llm", "data": {"parentId": "if1"}},
+            {"id": "n1", "type": "llm", "parentId": "if1"},
+            {"id": "n2", "type": "llm", "parentId": "if1"},
             {"id": "e1", "type": "end"},
         ],
         "edges": [
@@ -220,8 +220,8 @@ def test_validator_subgraph_no_entry():
         "nodes": [
             {"id": "s1", "type": "start"},
             {"id": "if1", "type": "if_else"},
-            {"id": "n1", "type": "llm", "data": {"parentId": "if1"}},
-            {"id": "n2", "type": "llm", "data": {"parentId": "if1"}},
+            {"id": "n1", "type": "llm", "parentId": "if1"},
+            {"id": "n2", "type": "llm", "parentId": "if1"},
             {"id": "e1", "type": "end"},
         ],
         "edges": [
@@ -240,8 +240,8 @@ def test_validator_subgraph_no_entry():
         "nodes": [
             {"id": "s1", "type": "start"},
             {"id": "if1", "type": "if_else"},
-            {"id": "n1", "type": "llm", "data": {"parentId": "if1"}},
-            {"id": "n2", "type": "llm", "data": {"parentId": "if1"}},
+            {"id": "n1", "type": "llm", "parentId": "if1"},
+            {"id": "n2", "type": "llm", "parentId": "if1"},
             {"id": "e1", "type": "end"},
         ],
         "edges": [
@@ -261,7 +261,7 @@ def test_validator_nested_graph_no_false_cycle():
         "nodes": [
             {"id": "s1", "type": "start"},
             {"id": "if1", "type": "if_else"},
-            {"id": "n1", "type": "llm", "data": {"parentId": "if1"}},
+            {"id": "n1", "type": "llm", "parentId": "if1"},
             {"id": "e1", "type": "end"},
         ],
         "edges": [
@@ -800,3 +800,107 @@ async def test_load_harness_session_restores_builder(db: Session):
     assert len(snap["nodes"]) == 3
     assert len(snap["edges"]) == 2
     assert {n["id"] for n in snap["nodes"]} == {"start_1", "llm_1", "end_1"}
+
+
+@pytest.mark.asyncio
+async def test_harness_ask_user_pause_then_load_resume_and_apply(db: Session):
+    """AskUser pauses the session; after load_harness_session + resume the builder
+    state is intact and the graph can be finalized and applied."""
+    db.add(Provider(type="openai", name="test", api_key_encrypted="enc", enabled=True, category="llm"))
+    db.commit()
+
+    hs = create_harness_session(db, goal="build a workflow")
+    hs.setup_tools(MagicMock())
+    hs.init_lead_agent()
+
+    pre_pause = [
+        ProposeAction(action=AddNodeAction(node_type="start", node_id="start_1")),
+        ProposeAction(action=AddNodeAction(node_type="llm", node_id="llm_1", config={"provider_id": 1})),
+        AskUser(question="Continue?", options=["yes", "no"]),
+    ]
+    post_resume = [
+        ProposeAction(action=AddNodeAction(node_type="end", node_id="end_1")),
+        ProposeAction(action=AddEdgeAction(source="start_1", target="llm_1")),
+        ProposeAction(action=AddEdgeAction(source="llm_1", target="end_1")),
+        Finalize(reason="done"),
+    ]
+
+    with patch.object(hs.lead_agent, "decide", side_effect=_make_decision_sequence(pre_pause)):
+        async def emit(ev):
+            pass
+        await hs.run(on_event=emit)
+
+    assert hs.status == "awaiting_user"
+    # Builder should have 2 nodes before the pause
+    assert len(hs.builder.snapshot()["nodes"]) == 2
+
+    # Simulate fresh process loading the session from DB
+    hs2 = load_harness_session(hs.id, db)
+    hs2.setup_tools(MagicMock())
+    hs2.init_lead_agent()
+    assert hs2.status == "awaiting_user"
+    # Builder must be restored from graph_draft
+    snap2 = hs2.builder.snapshot()
+    assert len(snap2["nodes"]) == 2
+    assert {n["id"] for n in snap2["nodes"]} == {"start_1", "llm_1"}
+
+    # Resume and finish the graph
+    with patch.object(hs2.lead_agent, "decide", side_effect=_make_decision_sequence(post_resume)):
+        async def emit2(ev):
+            pass
+        qid = hs2.workspace.open_question["question_id"]
+        await hs2.resume(question_id=qid, answer="yes", on_event=emit2)
+
+    assert hs2.status == "ready"
+    final_snap = hs2.builder.snapshot()
+    assert len(final_snap["nodes"]) == 3
+    assert len(final_snap["edges"]) == 2
+
+    # Apply should create a workflow without error
+    result = await hs2.apply()
+    assert "workflow_id" in result
+    assert hs2.status == "applied"
+
+
+def test_builder_snapshot_is_canonical_v2():
+    b = GraphBuilder()
+    b.apply(AddNodeAction(node_type="if_else", node_id="if_1", config={"branches": [{"id": "true"}]}))
+    b.apply(
+        AddNodeAction(
+            node_type="llm",
+            node_id="llm_true",
+            parent_id="if_1",
+            config={"branchId": "true", "provider_id": 1},
+        )
+    )
+
+    snap = b.snapshot()
+    child = next(n for n in snap["nodes"] if n["id"] == "llm_true")
+
+    assert snap["version"] == 2
+    assert child["parentId"] == "if_1"
+    assert child["branchId"] == "true"
+    assert child["config"] == {"provider_id": 1}
+    assert "data" not in child
+
+
+def test_harness_validator_accepts_v2_provider_config(db: Session):
+    db.add(Provider(type="openai", name="test", api_key_encrypted="enc", enabled=True, category="llm"))
+    db.commit()
+
+    graph = {
+        "version": 2,
+        "nodes": [
+            {"id": "start_1", "type": "start", "config": {}},
+            {"id": "llm_1", "type": "llm", "config": {"provider_id": 1}},
+            {"id": "end_1", "type": "end", "config": {"outputs": []}},
+        ],
+        "edges": [
+            {"source": "start_1", "target": "llm_1"},
+            {"source": "llm_1", "target": "end_1"},
+        ],
+    }
+
+    findings = validate_graph(graph, db=db)
+
+    assert not [f for f in findings if f.severity == "error"]

@@ -6,6 +6,7 @@ import random
 import uuid
 
 from backend.harness.actions import BuilderError
+from backend.core.graph_schema import dump_graph, load_graph
 from backend.harness.schemas import (
     AddEdgeAction,
     AddNodeAction,
@@ -64,15 +65,17 @@ class GraphBuilder:
 
     def snapshot(self) -> dict:
         """Return a JSON-serialisable snapshot of the current graph."""
-        return {
+        return dump_graph(load_graph({
+            "version": 2,
             "nodes": [dict(n) for n in self._nodes],
             "edges": [dict(e) for e in self._edges],
-        }
+        }))
 
     def from_snapshot(self, snapshot: dict) -> None:
         """Restore from a snapshot."""
-        self._nodes = [dict(n) for n in snapshot.get("nodes", [])]
-        self._edges = [dict(e) for e in snapshot.get("edges", [])]
+        graph = dump_graph(load_graph(snapshot))
+        self._nodes = [dict(n) for n in graph.get("nodes", [])]
+        self._edges = [dict(e) for e in graph.get("edges", [])]
 
     def node_ids(self) -> set[str]:
         return {n["id"] for n in self._nodes}
@@ -91,15 +94,18 @@ class GraphBuilder:
             raise BuilderError(f"Node '{node_id}' already exists")
 
         pos = _next_position(self._nodes)
-        data = dict(action.config)
-        if action.parent_id:
-            data["parentId"] = action.parent_id
+        config = dict(action.config)
+        branch_id = config.pop("branchId", None)
         node = {
             "id": node_id,
             "type": action.node_type,
             "position": pos,
-            "data": data,
+            "config": config,
         }
+        if action.parent_id:
+            node["parentId"] = action.parent_id
+        if isinstance(branch_id, str):
+            node["branchId"] = branch_id
         self._nodes.append(node)
 
     def _add_edge(self, action: AddEdgeAction) -> None:
@@ -121,7 +127,12 @@ class GraphBuilder:
     def _update_node_config(self, action: UpdateNodeConfigAction) -> None:
         for node in self._nodes:
             if node["id"] == action.node_id:
-                node["data"].update(action.config)
+                patch = dict(action.config)
+                if "parentId" in patch:
+                    node["parentId"] = patch.pop("parentId")
+                if "branchId" in patch:
+                    node["branchId"] = patch.pop("branchId")
+                node.setdefault("config", {}).update(patch)
                 return
         raise BuilderError(f"Node '{action.node_id}' not found for config update")
 
@@ -130,7 +141,7 @@ class GraphBuilder:
         # Identify children to cascade delete
         children_ids = {
             n["id"] for n in self._nodes
-            if (n.get("data") or {}).get("parentId") == action.node_id
+            if n.get("parentId") == action.node_id
         }
         ids_to_remove = {action.node_id} | children_ids
         self._nodes = [n for n in self._nodes if n["id"] not in ids_to_remove]
