@@ -1,7 +1,8 @@
 # PIAgent Graph Contract 与架构收口设计建议
 
 > **创建日期：** 2026-04-19  
-> **状态：** 建议稿  
+> **状态：** 已转为执行计划  
+> **执行计划：** `docs/superpowers/plans/2026-04-19-graph-contract-runtime-context-refactor.md`  
 > **背景：** 基于当前 Harness v2 与控制流/子图实现 review 后的架构整理建议。  
 > **目标：** 在继续扩展 if-else、iteration、Harness 自动建图之前，先把 graph 契约和模块边界收紧，避免前端、后端、Harness 对同一张图产生不同理解。
 

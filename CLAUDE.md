@@ -44,9 +44,11 @@ cd frontend && npm run build   # runs tsc -b then vite build
 
 ### Backend (Python / FastAPI)
 
-**Execution pipeline:** Workflow JSON → `GraphCompiler` validates DAG (Kahn's algorithm) & topological sort → `ExecutionEngine` runs nodes sequentially → SSE events streamed to frontend.
+**Execution pipeline:** Workflow JSON is loaded through `backend/core/graph_schema.py` and normalized to WorkflowGraph v2. `GraphCompiler` validates the canonical graph and builds a `CompiledWorkflow` with execution order, node configs, parent scopes, and branch metadata. `ExecutionEngine` consumes the compiled workflow, passes a `RunContext` to nodes, and emits typed SSE events.
 
-Key flow: `api/workflows.py` receives run request → creates `WorkflowRun` record → opens SSE endpoint → `ExecutionEngine.run()` iterates nodes in topological order, calling `node.execute(state)` and emitting events via callback queue.
+Key flow: `api/workflows.py` receives run request → creates `WorkflowRun` record → opens SSE endpoint → `ExecutionEngine.run()` iterates nodes in topological order, calling `node.execute(state, run_context=...)` and emitting events via callback queue.
+
+**Graph contract:** New saves use WorkflowGraph v2: node structural fields (`parentId`, `branchId`) are top-level, node business fields live under `config`, and `sourceHandle` is UI metadata only. Legacy v1 graphs with `data` are accepted at boundaries and normalized before validation or execution.
 
 **Node system:** All nodes extend `BaseNode` (in `nodes/base.py`) with a class-level `node_type` string and `async execute(state, **kwargs) -> WorkflowState`. Nodes are registered at import time in `compiler.py` via `node_registry`. `WorkflowState` is a TypedDict; nodes read from `state["inputs"]` / `state["node_outputs"]` and write their output back into `state["node_outputs"][self.node_id]`.
 
