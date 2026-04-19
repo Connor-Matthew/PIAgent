@@ -116,6 +116,27 @@ def test_builder_delete_node_cascades_edges():
     assert len(snap["edges"]) == 0
 
 
+def test_builder_add_node_with_parent_id():
+    b = GraphBuilder()
+    b.apply(AddNodeAction(node_type="if_else", node_id="if1"))
+    b.apply(AddNodeAction(node_type="llm", node_id="n1", parent_id="if1"))
+    snap = b.snapshot()
+    n1 = next(n for n in snap["nodes"] if n["id"] == "n1")
+    assert n1["data"]["parentId"] == "if1"
+
+
+def test_builder_delete_node_cascades_children():
+    b = GraphBuilder()
+    b.apply(AddNodeAction(node_type="if_else", node_id="if1"))
+    b.apply(AddNodeAction(node_type="llm", node_id="n1", parent_id="if1"))
+    b.apply(AddNodeAction(node_type="llm", node_id="n2", parent_id="if1"))
+    b.apply(AddEdgeAction(source="n1", target="n2"))
+    b.apply(DeleteNodeAction(node_id="if1"))
+    snap = b.snapshot()
+    assert len(snap["nodes"]) == 0
+    assert len(snap["edges"]) == 0
+
+
 # ── validator tests ──
 
 def test_validator_missing_start_and_end():
@@ -154,6 +175,103 @@ def test_validator_too_simple():
     }
     findings = validate_graph(graph)
     assert any(f.code == "too_simple" for f in findings)
+
+
+def test_validator_cross_scope_edge():
+    graph = {
+        "nodes": [
+            {"id": "s1", "type": "start"},
+            {"id": "if1", "type": "if_else"},
+            {"id": "n1", "type": "llm", "data": {"parentId": "if1"}},
+            {"id": "e1", "type": "end"},
+        ],
+        "edges": [
+            {"id": "s1-if1", "source": "s1", "target": "if1"},
+            {"id": "if1-e1", "source": "if1", "target": "e1"},
+            {"id": "n1-e1", "source": "n1", "target": "e1"},  # illegal: child -> external
+        ],
+    }
+    findings = validate_graph(graph)
+    assert any(f.code == "cross_scope_edge" for f in findings)
+
+
+def test_validator_subgraph_cycle():
+    graph = {
+        "nodes": [
+            {"id": "s1", "type": "start"},
+            {"id": "if1", "type": "if_else"},
+            {"id": "n1", "type": "llm", "data": {"parentId": "if1"}},
+            {"id": "n2", "type": "llm", "data": {"parentId": "if1"}},
+            {"id": "e1", "type": "end"},
+        ],
+        "edges": [
+            {"id": "s1-if1", "source": "s1", "target": "if1"},
+            {"id": "if1-e1", "source": "if1", "target": "e1"},
+            {"id": "n1-n2", "source": "n1", "target": "n2"},
+            {"id": "n2-n1", "source": "n2", "target": "n1"},  # cycle inside subgraph
+        ],
+    }
+    findings = validate_graph(graph)
+    assert any(f.code == "subgraph_cycle" for f in findings)
+
+
+def test_validator_subgraph_no_entry():
+    graph = {
+        "nodes": [
+            {"id": "s1", "type": "start"},
+            {"id": "if1", "type": "if_else"},
+            {"id": "n1", "type": "llm", "data": {"parentId": "if1"}},
+            {"id": "n2", "type": "llm", "data": {"parentId": "if1"}},
+            {"id": "e1", "type": "end"},
+        ],
+        "edges": [
+            {"id": "s1-if1", "source": "s1", "target": "if1"},
+            {"id": "if1-e1", "source": "if1", "target": "e1"},
+            {"id": "n1-n2", "source": "n1", "target": "n2"},  # n1 has incoming from nowhere in subgraph
+        ],
+    }
+    findings = validate_graph(graph)
+    # n1 and n2 both have no incoming edges within the subgraph, so entry_nodes = {n1, n2}
+    # This should NOT trigger subgraph_no_entry
+    assert not any(f.code == "subgraph_no_entry" for f in findings)
+
+    # Now make every child have an incoming edge from another child
+    graph2 = {
+        "nodes": [
+            {"id": "s1", "type": "start"},
+            {"id": "if1", "type": "if_else"},
+            {"id": "n1", "type": "llm", "data": {"parentId": "if1"}},
+            {"id": "n2", "type": "llm", "data": {"parentId": "if1"}},
+            {"id": "e1", "type": "end"},
+        ],
+        "edges": [
+            {"id": "s1-if1", "source": "s1", "target": "if1"},
+            {"id": "if1-e1", "source": "if1", "target": "e1"},
+            {"id": "n1-n2", "source": "n1", "target": "n2"},
+            {"id": "n2-n1", "source": "n2", "target": "n1"},
+        ],
+    }
+    findings2 = validate_graph(graph2)
+    assert any(f.code == "subgraph_no_entry" for f in findings2)
+
+
+def test_validator_nested_graph_no_false_cycle():
+    """A flat nested graph with parentId should not trigger a false cycle."""
+    graph = {
+        "nodes": [
+            {"id": "s1", "type": "start"},
+            {"id": "if1", "type": "if_else"},
+            {"id": "n1", "type": "llm", "data": {"parentId": "if1"}},
+            {"id": "e1", "type": "end"},
+        ],
+        "edges": [
+            {"id": "s1-if1", "source": "s1", "target": "if1"},
+            {"id": "if1-e1", "source": "if1", "target": "e1"},
+        ],
+    }
+    findings = validate_graph(graph)
+    assert not any(f.code == "cycle" for f in findings)
+    assert not any(f.code == "cross_scope_edge" for f in findings)
 
 
 # ── workspace tests ──

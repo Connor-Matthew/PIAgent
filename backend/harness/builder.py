@@ -91,11 +91,14 @@ class GraphBuilder:
             raise BuilderError(f"Node '{node_id}' already exists")
 
         pos = _next_position(self._nodes)
+        data = dict(action.config)
+        if action.parent_id:
+            data["parentId"] = action.parent_id
         node = {
             "id": node_id,
             "type": action.node_type,
             "position": pos,
-            "data": dict(action.config),
+            "data": data,
         }
         self._nodes.append(node)
 
@@ -124,13 +127,21 @@ class GraphBuilder:
 
     def _delete_node(self, action: DeleteNodeAction) -> None:
         original_len = len(self._nodes)
-        self._nodes = [n for n in self._nodes if n["id"] != action.node_id]
-        if len(self._nodes) == original_len:
-            raise BuilderError(f"Node '{action.node_id}' not found for deletion")
-        # Cascade: remove incident edges
+        # Identify children to cascade delete
+        children_ids = {
+            n["id"] for n in self._nodes
+            if (n.get("data") or {}).get("parentId") == action.node_id
+        }
+        ids_to_remove = {action.node_id} | children_ids
+        self._nodes = [n for n in self._nodes if n["id"] not in ids_to_remove]
+        if len(self._nodes) == original_len - len(ids_to_remove) + len(children_ids):
+            # Only the parent was not found
+            if original_len == len(self._nodes):
+                raise BuilderError(f"Node '{action.node_id}' not found for deletion")
+        # Cascade: remove incident edges for deleted nodes
         self._edges = [
             e for e in self._edges
-            if e["source"] != action.node_id and e["target"] != action.node_id
+            if e["source"] not in ids_to_remove and e["target"] not in ids_to_remove
         ]
 
     def _delete_edge(self, action: DeleteEdgeAction) -> None:

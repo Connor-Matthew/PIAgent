@@ -14,6 +14,7 @@ class AddNodeAction(BaseModel):
     node_type: str
     node_id: str | None = Field(default=None, description="Auto-generated if omitted")
     config: dict = Field(default_factory=dict)
+    parent_id: str | None = Field(default=None, description="Parent node id for nested nodes (if_else/iteration branches)")
 
 
 class AddEdgeAction(BaseModel):

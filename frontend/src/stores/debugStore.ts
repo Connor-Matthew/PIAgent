@@ -3,6 +3,10 @@ import type { NodeExecutionState, SSEEvent, StreamProgressDelta } from '../types
 
 type DebugMode = 'simple' | 'detailed'
 
+function compositeKey(nodeId: string, iterationIndex?: number | null): string {
+  return iterationIndex != null ? `${nodeId}#${iterationIndex}` : `${nodeId}#0`
+}
+
 interface DebugState {
   isOpen: boolean
   mode: DebugMode
@@ -34,6 +38,10 @@ interface DebugState {
   markStopped: (message?: string) => void
   handleSSEEvent: (event: SSEEvent) => void
   reset: () => void
+
+  // Helpers for control-flow aware state access
+  getNodeState: (nodeId: string, iterationIndex?: number) => NodeExecutionState | undefined
+  getAggregatedNodeStatus: (nodeId: string) => NodeExecutionState['status'] | undefined
 }
 
 export const useDebugStore = create<DebugState>((set, get) => ({
@@ -106,7 +114,8 @@ export const useDebugStore = create<DebugState>((set, get) => ({
     const states = new Map(get().nodeStates)
 
     if (event.type === 'node_start' && event.node_id) {
-      states.set(event.node_id, {
+      const key = compositeKey(event.node_id, event.iteration_index)
+      states.set(key, {
         nodeId: event.node_id,
         nodeType: event.node_type,
         status: 'running',
@@ -116,7 +125,8 @@ export const useDebugStore = create<DebugState>((set, get) => ({
     }
 
     if (event.type === 'node_stream' && event.node_id) {
-      const existing = states.get(event.node_id) ?? {
+      const key = compositeKey(event.node_id, event.iteration_index)
+      const existing = states.get(key) ?? {
         nodeId: event.node_id,
         nodeType: event.node_type,
         status: 'running' as const,
@@ -138,12 +148,13 @@ export const useDebugStore = create<DebugState>((set, get) => ({
         existing.lastSeq = event.seq
       }
 
-      states.set(event.node_id, { ...existing })
+      states.set(key, { ...existing })
       set({ nodeStates: states })
     }
 
     if (event.type === 'node_heartbeat' && event.node_id) {
-      const existing = states.get(event.node_id) ?? {
+      const key = compositeKey(event.node_id, event.iteration_index)
+      const existing = states.get(key) ?? {
         nodeId: event.node_id,
         nodeType: event.node_type,
         status: 'running' as const,
@@ -151,12 +162,13 @@ export const useDebugStore = create<DebugState>((set, get) => ({
       }
       existing.heartbeatElapsed = event.elapsed
       existing.heartbeatMessage = event.message
-      states.set(event.node_id, { ...existing })
+      states.set(key, { ...existing })
       set({ nodeStates: states })
     }
 
     if (event.type === 'node_end' && event.node_id) {
-      const existing = states.get(event.node_id) ?? {
+      const key = compositeKey(event.node_id, event.iteration_index)
+      const existing = states.get(key) ?? {
         nodeId: event.node_id,
         nodeType: event.node_type,
         status: 'running' as const,
@@ -179,7 +191,7 @@ export const useDebugStore = create<DebugState>((set, get) => ({
       } else if (output.answer) {
         existing.output = String(output.answer)
       }
-      states.set(event.node_id, { ...existing })
+      states.set(key, { ...existing })
       set({ nodeStates: states })
     }
 
@@ -198,6 +210,28 @@ export const useDebugStore = create<DebugState>((set, get) => ({
         set({ audioUrl: event.outputs.audio_url as string })
       }
     }
+  },
+
+  getNodeState: (nodeId, iterationIndex) => {
+    return get().nodeStates.get(compositeKey(nodeId, iterationIndex))
+  },
+
+  getAggregatedNodeStatus: (nodeId) => {
+    const states = get().nodeStates
+    let hasRunning = false
+    let hasFailed = false
+    let hasCompleted = false
+    for (const [key, state] of states) {
+      if (key.startsWith(`${nodeId}#`)) {
+        if (state.status === 'running') hasRunning = true
+        if (state.status === 'failed') hasFailed = true
+        if (state.status === 'completed') hasCompleted = true
+      }
+    }
+    if (hasRunning) return 'running'
+    if (hasFailed) return 'failed'
+    if (hasCompleted) return 'completed'
+    return undefined
   },
 
   reset: () =>

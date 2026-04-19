@@ -37,6 +37,8 @@ export function useDnD() {
         agent: 'ReAct Agent',
         tts: 'TTS 音频合成',
         end: '结束',
+        if_else: 'If-Else 分支',
+        iteration: 'Iteration 循环',
       }
 
       addNode({

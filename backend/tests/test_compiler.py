@@ -67,7 +67,7 @@ def test_compiler_topological_sort():
     assert order == ["start_1", "llm_1", "tts_1", "end_1"]
 
 
-def test_compiler_compile_returns_langgraph():
+def test_compiler_compile_returns_compiled_workflow():
     graph_json = make_graph_json(
         nodes=[
             {"id": "start_1", "type": "start", "data": {}},
@@ -79,9 +79,9 @@ def test_compiler_compile_returns_langgraph():
     )
     compiler = GraphCompiler()
     compiled = compiler.compile(graph_json)
-    # compiled should be a LangGraph CompiledGraph
     assert compiled is not None
-    assert hasattr(compiled, "invoke")
+    assert hasattr(compiled, "top_level_order")
+    assert compiled.top_level_order == ["start_1", "end_1"]
 
 
 def test_compiler_dangling_edge_reference_raises():

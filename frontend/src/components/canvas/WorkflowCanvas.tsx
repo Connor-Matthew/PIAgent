@@ -49,29 +49,30 @@ export function WorkflowCanvas() {
   const harnessError = useHarnessStore((s) => s.error)
   const isExecuting = useDebugStore((s) => s.isRunning)
   const nodeStates = useDebugStore((s) => s.nodeStates)
+  const getAggregatedNodeStatus = useDebugStore((s) => s.getAggregatedNodeStatus)
   const { onInit, onDragOver, onDrop } = useDnD()
 
   const latestEvent = harnessEvents[harnessEvents.length - 1]
 
   const renderedNodes = useMemo(() => {
     return nodes.map((node) => {
-      const executionState = nodeStates.get(node.id)
+      const aggregatedStatus = getAggregatedNodeStatus(node.id)
       let visualState = node.data.visualState
       let visualLabel = node.data.visualLabel
       let statusNote = node.data.statusNote
 
-      if (executionState?.status === 'running') {
+      if (aggregatedStatus === 'running') {
         visualState = 'running'
         visualLabel = 'RUN'
-        statusNote = executionState.progressLabel || executionState.heartbeatMessage || '节点执行中'
-      } else if (executionState?.status === 'completed') {
+        statusNote = '节点执行中'
+      } else if (aggregatedStatus === 'completed') {
         visualState = 'completed'
         visualLabel = 'DONE'
-        statusNote = executionState.output || '节点已完成'
-      } else if (executionState?.status === 'failed') {
+        statusNote = '节点已完成'
+      } else if (aggregatedStatus === 'failed') {
         visualState = 'failed'
         visualLabel = 'FAIL'
-        statusNote = executionState.output || '节点执行失败'
+        statusNote = '节点执行失败'
       } else if (isExecuting && node.data.visualState !== 'failed') {
         visualState = 'idle'
         visualLabel = ''
@@ -87,7 +88,7 @@ export function WorkflowCanvas() {
         },
       }
     })
-  }, [isExecuting, nodeStates, nodes])
+  }, [isExecuting, getAggregatedNodeStatus, nodes])
 
   const renderedEdges = useMemo(() => {
     return edges.map((edge) => {
