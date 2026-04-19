@@ -4,6 +4,7 @@ import time
 from typing import Callable, Awaitable, Any
 
 from backend.core.compiler import GraphCompiler
+from backend.core.graph_schema import get_node_branch_id, get_node_config
 from backend.core.state import WorkflowState
 from backend.core.template import REF_RE, resolve_reference
 
@@ -164,7 +165,7 @@ class ExecutionEngine:
         from backend.nodes.if_else_node import IfElseNode
 
         node_def = compiled.node_defs[if_else_id]
-        branches = (node_def.get("data") or {}).get("branches", [])
+        branches = get_node_config(node_def).get("branches", [])
 
         await self._emit(on_event, {
             "type": "node_start",
@@ -199,7 +200,7 @@ class ExecutionEngine:
             branch_children = [
                 cid
                 for cid in children
-                if (compiled.node_defs[cid].get("data") or {}).get("branchId") == branch_id
+                if get_node_branch_id(compiled.node_defs[cid]) == branch_id
             ]
 
             branch_state = {
@@ -241,13 +242,13 @@ class ExecutionEngine:
         on_event: Callable[[dict], Awaitable[None]] | None,
     ) -> None:
         node_def = compiled.node_defs[iter_id]
-        data = node_def.get("data") or {}
-        input_ref = data.get("inputRef", "")
-        item_var = data.get("itemVar", "item")
-        index_var = data.get("indexVar", "index")
-        output_field = data.get("outputField", "")
-        error_strategy = data.get("errorStrategy", "fail_fast")
-        max_concurrency = data.get("maxConcurrency", 5)
+        config = get_node_config(node_def)
+        input_ref = config.get("inputRef", "")
+        item_var = config.get("itemVar", "item")
+        index_var = config.get("indexVar", "index")
+        output_field = config.get("outputField", "")
+        error_strategy = config.get("errorStrategy", "fail_fast")
+        max_concurrency = config.get("maxConcurrency", 5)
 
         await self._emit(on_event, {
             "type": "node_start",

@@ -97,3 +97,21 @@ def test_compiler_rejects_start_with_parent_id():
     compiler = GraphCompiler()
     with pytest.raises(CompilerError, match="cannot have a parentId"):
         compiler.validate(graph_json)
+
+
+def test_compiler_rejects_v2_orphan_parent_id():
+    graph_json = make_graph_json(
+        nodes=[
+            {"id": "start_1", "type": "start", "config": {}},
+            {"id": "llm_1", "type": "llm", "parentId": "missing_parent", "config": {}},
+            {"id": "end_1", "type": "end", "config": {}},
+        ],
+        edges=[
+            {"source": "start_1", "target": "llm_1"},
+            {"source": "llm_1", "target": "end_1"},
+        ],
+    )
+
+    compiler = GraphCompiler()
+    with pytest.raises(CompilerError, match="parentId.*does not exist"):
+        compiler.validate(graph_json)

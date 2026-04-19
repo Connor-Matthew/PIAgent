@@ -95,17 +95,21 @@ def _upgrade_v1_node(node_def: dict[str, Any]) -> dict[str, Any]:
 
     data = node_def.get("data") or {}
 
-    # Hoist structural fields
-    if isinstance(data.get("parentId"), str):
-        result["parentId"] = data["parentId"]
-    if isinstance(data.get("branchId"), str):
-        result["branchId"] = data["branchId"]
+    # Hoist structural fields (top-level takes precedence over data)
+    parent_id = node_def.get("parentId") if isinstance(node_def.get("parentId"), str) else data.get("parentId")
+    branch_id = node_def.get("branchId") if isinstance(node_def.get("branchId"), str) else data.get("branchId")
+    if isinstance(parent_id, str):
+        result["parentId"] = parent_id
+    if isinstance(branch_id, str):
+        result["branchId"] = branch_id
 
-    # Hoist display meta
-    if isinstance(data.get("label"), str):
-        result["label"] = data["label"]
-    if isinstance(data.get("locked"), bool):
-        result["locked"] = data["locked"]
+    # Hoist display meta (top-level takes precedence over data)
+    label = node_def.get("label") if isinstance(node_def.get("label"), str) else data.get("label")
+    locked = node_def.get("locked") if isinstance(node_def.get("locked"), bool) else data.get("locked")
+    if isinstance(label, str):
+        result["label"] = label
+    if isinstance(locked, bool):
+        result["locked"] = locked
 
     # Everything else becomes config
     config: dict[str, Any] = {}

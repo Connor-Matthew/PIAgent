@@ -277,3 +277,52 @@ def test_compiler_topological_sort_ignores_unconnected_nodes():
     assert "orphan_1" not in order
     assert "tts_1" not in order
     assert order == ["start_1", "llm_1", "end_1"]
+
+
+def test_compiler_preserves_v2_node_config():
+    graph = {
+        "version": 2,
+        "nodes": [
+            {"id": "start_1", "type": "start", "config": {"inputs": []}},
+            {"id": "llm_1", "type": "llm", "config": {"provider_id": 1, "model": "gpt-4o"}},
+            {
+                "id": "end_1",
+                "type": "end",
+                "config": {
+                    "outputs": [{"name": "answer", "source": "reference", "value": "{{llm_1.text}}"}],
+                    "answer": "{{answer}}",
+                },
+            },
+        ],
+        "edges": [
+            {"source": "start_1", "target": "llm_1"},
+            {"source": "llm_1", "target": "end_1"},
+        ],
+    }
+
+    compiled = GraphCompiler().compile(graph)
+
+    assert compiled.nodes["llm_1"].config["provider_id"] == 1
+    assert compiled.nodes["llm_1"].config["model"] == "gpt-4o"
+    assert compiled.nodes["end_1"].config["outputs"][0]["value"] == "{{llm_1.text}}"
+
+
+def test_compiler_uses_v2_parent_and_branch_fields():
+    graph = {
+        "version": 2,
+        "nodes": [
+            {"id": "start_1", "type": "start", "config": {}},
+            {"id": "if_1", "type": "if_else", "config": {"branches": [{"id": "true", "condition": None}]}},
+            {"id": "child_1", "type": "llm", "parentId": "if_1", "branchId": "true", "config": {"provider_id": 1}},
+            {"id": "end_1", "type": "end", "config": {}},
+        ],
+        "edges": [
+            {"source": "start_1", "target": "if_1"},
+            {"source": "if_1", "target": "end_1"},
+        ],
+    }
+
+    compiled = GraphCompiler().compile(graph)
+
+    assert compiled.children_by_parent["if_1"] == ["child_1"]
+    assert compiled.node_defs["child_1"]["branchId"] == "true"
