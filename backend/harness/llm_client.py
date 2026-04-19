@@ -1,8 +1,4 @@
-"""PIAgent Harness v2 — Lightweight LLM client for structured output.
-
-Reuses the project's provider build logic but is self-contained
-(no imports from backend.agent or backend.harness_legacy).
-"""
+"""PIAgent Harness v2 — Lightweight LLM client for structured output."""
 
 from __future__ import annotations
 

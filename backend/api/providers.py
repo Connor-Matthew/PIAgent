@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from backend.core.crypto import encrypt, decrypt, mask_key
+from backend.core.graph_schema import get_node_config
 from backend.database import get_db
 from backend.models.provider import Provider
 from backend.models.workflow import Workflow
@@ -58,9 +59,10 @@ def _find_provider_references(db: Session, provider_id: int) -> list[dict]:
     for wf in workflows:
         graph = wf.graph
         for node in graph.get("nodes", []):
-            if node.get("type") == "llm" and node.get("data", {}).get("provider_id") == provider_id:
+            node_config = get_node_config(node)
+            if node.get("type") == "llm" and node_config.get("provider_id") == provider_id:
                 refs.append({"workflow_id": wf.id, "workflow_name": wf.name, "node_id": node.get("id")})
-            if node.get("type") == "tts" and node.get("data", {}).get("provider_id") == provider_id:
+            if node.get("type") == "tts" and node_config.get("provider_id") == provider_id:
                 refs.append({"workflow_id": wf.id, "workflow_name": wf.name, "node_id": node.get("id")})
     return refs
 

@@ -44,19 +44,6 @@ def _ensure_agent_session_schema(db_engine: Engine):
             )
         logger.info("Added missing column %s to agent_sessions", column_name)
 
-    if "user_goal" in existing_columns:
-        with db_engine.begin() as conn:
-            conn.execute(
-                text(
-                    """
-                    UPDATE agent_sessions
-                    SET goal = user_goal
-                    WHERE COALESCE(goal, '') = ''
-                    """
-                )
-            )
-        logger.info("Backfilled agent_sessions.goal from legacy user_goal column")
-
     if "workspace_json" in existing_columns or "workspace_json" in missing_columns:
         with db_engine.begin() as conn:
             conn.execute(

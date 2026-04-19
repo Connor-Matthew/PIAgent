@@ -5,7 +5,6 @@ from unittest.mock import patch
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import Session
 
-from backend.harness.session import create_harness_session
 from backend.main import (
     _ensure_agent_session_schema,
     _ensure_secret_key,
@@ -106,96 +105,6 @@ def test_ensure_agent_session_schema_backfills_legacy_sqlite_columns():
         }
         assert "answered_dims_json" in column_names
         assert "events_json" in column_names
-    finally:
-        engine.dispose()
-        os.unlink(db_path)
-
-
-def test_ensure_agent_session_schema_adds_goal_and_backfills_from_user_goal():
-    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-        db_path = f.name
-
-    engine = create_engine(f"sqlite:///{db_path}")
-    try:
-        with engine.begin() as conn:
-            conn.execute(
-                text(
-                    """
-                    CREATE TABLE agent_sessions (
-                        id VARCHAR NOT NULL PRIMARY KEY,
-                        user_goal TEXT NOT NULL,
-                        status VARCHAR(32) NOT NULL,
-                        turns_json TEXT NOT NULL,
-                        recipe_json TEXT,
-                        graph_json TEXT,
-                        rationale_text TEXT,
-                        workflow_id VARCHAR,
-                        created_at DATETIME,
-                        updated_at DATETIME
-                    )
-                    """
-                )
-            )
-            conn.execute(
-                text(
-                    """
-                    INSERT INTO agent_sessions (
-                        id,
-                        user_goal,
-                        status,
-                        turns_json
-                    ) VALUES (
-                        'legacy-session',
-                        'legacy goal',
-                        'running',
-                        '[]'
-                    )
-                    """
-                )
-            )
-
-        _ensure_agent_session_schema(engine)
-
-        column_names = {
-            column["name"] for column in inspect(engine).get_columns("agent_sessions")
-        }
-        assert "goal" in column_names
-        assert "workspace_json" in column_names
-
-        with engine.connect() as conn:
-            row = conn.execute(
-                text(
-                    "SELECT goal, user_goal FROM agent_sessions WHERE id = 'legacy-session'"
-                )
-            ).one()
-
-        assert row.goal == "legacy goal"
-        assert row.user_goal == "legacy goal"
-
-        db = Session(bind=engine)
-        try:
-            hs = create_harness_session(
-                db,
-                goal="new goal",
-            )
-            inserted = db.execute(
-                text(
-                    """
-                    SELECT goal, user_goal, turns_json, workspace_json, events_json
-                    FROM agent_sessions
-                    WHERE id = :session_id
-                    """
-                ),
-                {"session_id": hs.id},
-            ).one()
-        finally:
-            db.close()
-
-        assert inserted.goal == "new goal"
-        assert inserted.user_goal == "new goal"
-        assert inserted.turns_json == "[]"
-        assert inserted.workspace_json == "{}"
-        assert inserted.events_json == "[]"
     finally:
         engine.dispose()
         os.unlink(db_path)

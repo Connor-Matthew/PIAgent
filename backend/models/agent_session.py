@@ -23,15 +23,6 @@ class AgentSession(Base):
         onupdate=lambda: datetime.now(timezone.utc),
     )
 
-    # Legacy column aliases (to be removed after v2 stabilises)
-    @property
-    def user_goal(self) -> str:
-        return self.goal
-
-    @user_goal.setter
-    def user_goal(self, value: str):
-        self.goal = value
-
     @property
     def events(self) -> list[dict]:
         return json.loads(self.events_json or "[]")
