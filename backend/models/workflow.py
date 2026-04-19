@@ -2,6 +2,7 @@ import json
 from datetime import datetime, timezone
 from sqlalchemy import Column, String, Text, DateTime
 from backend.database import Base
+from backend.core.graph_schema import dump_graph, load_graph
 import uuid
 
 class Workflow(Base):
@@ -20,4 +21,4 @@ class Workflow(Base):
 
     @graph.setter
     def graph(self, value: dict):
-        self.graph_json = json.dumps(value, ensure_ascii=False)
+        self.graph_json = json.dumps(dump_graph(load_graph(value)), ensure_ascii=False)

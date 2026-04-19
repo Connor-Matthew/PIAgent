@@ -163,3 +163,40 @@ def test_update_workflow_with_duplicate_id_returns_400(client):
     resp = client.put(f"/api/workflows/{wf_id}", json={"graph": bad_graph})
     assert resp.status_code == 400
 
+
+def test_create_workflow_stores_graph_as_v2(client):
+    graph = {
+        "nodes": [
+            {"id": "start_1", "type": "start", "data": {"inputs": []}},
+            {"id": "end_1", "type": "end", "data": {"outputs": [], "answer": ""}},
+        ],
+        "edges": [{"source": "start_1", "target": "end_1"}],
+    }
+
+    response = client.post("/api/workflows", json={"name": "v1 input", "graph": graph})
+
+    assert response.status_code == 201
+    saved = response.json()["graph"]
+    assert saved["version"] == 2
+    assert saved["nodes"][0]["config"] == {"inputs": []}
+    assert "data" not in saved["nodes"][0]
+
+
+def test_update_workflow_returns_v2_graph(client):
+    graph = {
+        "nodes": [
+            {"id": "start_1", "type": "start", "data": {}},
+            {"id": "end_1", "type": "end", "data": {}},
+        ],
+        "edges": [{"source": "start_1", "target": "end_1"}],
+    }
+    created = client.post("/api/workflows", json={"name": "x", "graph": graph}).json()
+
+    response = client.put(
+        f"/api/workflows/{created['id']}",
+        json={"graph": graph},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["graph"]["version"] == 2
+

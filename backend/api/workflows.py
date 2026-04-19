@@ -13,6 +13,7 @@ from backend.models.workflow import Workflow
 from backend.models.run import WorkflowRun
 from backend.core.engine import ExecutionEngine
 from backend.core.compiler import GraphCompiler, CompilerError, CycleDetectedError
+from backend.core.graph_schema import dump_graph, load_graph
 
 router = APIRouter(prefix="/api/workflows", tags=["workflows"])
 RUN_TASKS: dict[str, asyncio.Task] = {}
@@ -33,6 +34,10 @@ class WorkflowUpdate(BaseModel):
 class RunCreate(BaseModel):
     inputs: dict | None = None
     input: str | None = None
+
+
+def _normalize_graph_payload(graph: dict) -> dict:
+    return dump_graph(load_graph(graph))
 
 
 def _serialize_state(state: dict) -> dict:
@@ -57,14 +62,15 @@ def _serialize_state(state: dict) -> dict:
 
 @router.post("", status_code=201)
 def create_workflow(body: WorkflowCreate, db: Session = Depends(get_db)):
+    graph = _normalize_graph_payload(body.graph)
     compiler = GraphCompiler()
     try:
-        compiler.validate(body.graph, db=db)
+        compiler.validate(graph, db=db)
     except (CompilerError, ValueError, CycleDetectedError) as e:
         raise HTTPException(status_code=400, detail=str(e))
 
     wf = Workflow(name=body.name, description=body.description)
-    wf.graph = body.graph
+    wf.graph = graph
     db.add(wf)
     db.commit()
     db.refresh(wf)
@@ -110,18 +116,19 @@ def update_workflow(workflow_id: str, body: WorkflowUpdate, db: Session = Depend
     wf = db.query(Workflow).filter(Workflow.id == workflow_id).first()
     if not wf:
         raise HTTPException(status_code=404, detail="Workflow not found")
-    if body.graph is not None:
+    graph = _normalize_graph_payload(body.graph) if body.graph is not None else None
+    if graph is not None:
         compiler = GraphCompiler()
         try:
-            compiler.validate(body.graph, db=db)
+            compiler.validate(graph, db=db)
         except (CompilerError, ValueError, CycleDetectedError) as e:
             raise HTTPException(status_code=400, detail=str(e))
     if body.name is not None:
         wf.name = body.name
     if body.description is not None:
         wf.description = body.description
-    if body.graph is not None:
-        wf.graph = body.graph
+    if graph is not None:
+        wf.graph = graph
     db.commit()
     db.refresh(wf)
     return {
