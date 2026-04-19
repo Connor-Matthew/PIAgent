@@ -4,3 +4,4 @@
 .alma-snapshots
 .env
 audio_files/
+node_modules/
