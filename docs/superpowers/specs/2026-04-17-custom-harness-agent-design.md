@@ -690,7 +690,7 @@ Harness Framework 负责：
 
 ## 17. 一句话总结
 
-我们要的不是“把 DeerFlow 搬进 PIAgent”，也不是“再写一个 planner”。
+我们要的不是”把 DeerFlow 搬进 PIAgent”，也不是”再写一个 planner”。
 
 我们要的是：
 
@@ -702,3 +702,306 @@ Harness Framework 负责：
 - 下层有真正的 Runtime AgentNode tool loop
 - 中间通过 typed tools、workspace、validators、pause/resume、draft-first 流程连接起来
 - 同时不破坏当前 workflow runtime 的稳定性
+
+---
+
+## 附录 A：v1 类型契约（Canonical Types）
+
+> 本附录是 v1 的硬契约。所有字段以 Pydantic 风格书写；`Literal` 表示判别字段。
+> 现有代码位置：`backend/harness/schemas.py`、`backend/harness/actions.py`、`backend/harness/context.py`。
+> 出现分歧时，以本附录为准，现有代码按此迁移。
+
+### A.1 `Decision`（一轮一个 decision 的判别联合）
+
+`Decision` 是 `LeadLoop` 每一轮产出的唯一对象。五个变体，按 phase 约束开放集合。
+
+```python
+class CallToolDecision:
+    kind: Literal[“call_tool”]
+    name: str                      # 必须在 ToolRegistry 且 availability ∈ {planning, both}
+    arguments: dict[str, Any]      # 必须通过 tool.input_schema 校验
+    reasoning: str                 # 非空；供 trace/SSE 展示
+
+class ProposeActionDecision:
+    kind: Literal[“propose_action”]
+    action: GraphAction            # 见 A.2，严格判别联合
+    reasoning: str
+
+class AskUserDecision:
+    kind: Literal[“ask_user”]
+    question: str                  # 非空
+    options: list[str] | None      # 可选，≤6 项
+    question_id: str               # 必填，UUID；用于 resume 时匹配回复
+
+class FinalizeClarificationDecision:
+    kind: Literal[“finalize_clarification”]
+    reasoning: str
+    # 触发 phase: clarifying -> planning
+
+class FinalizeDecision:
+    kind: Literal[“finalize”]
+    reasoning: str
+    # 触发 FinalizeValidator；失败回写 observation，不退出 session
+
+Decision = (
+    CallToolDecision
+    | ProposeActionDecision
+    | AskUserDecision
+    | FinalizeClarificationDecision
+    | FinalizeDecision
+)
+```
+
+**Phase × Decision 可见性矩阵**（Loop 必须按此过滤 prompt 里暴露的变体）：
+
+| phase                 | ask_user | finalize_clarification | call_tool | propose_action | finalize |
+|-----------------------|:--------:|:----------------------:|:---------:|:--------------:|:--------:|
+| `clarifying`          | ✅       | ✅                     | ❌        | ❌             | ❌       |
+| `planning`            | ❌       | ❌                     | ✅        | ✅             | ✅       |
+| `waiting_user`        | ❌       | ❌                     | ❌        | ❌             | ❌       |
+| `finalizing`          | ❌       | ❌                     | ❌        | ❌             | ❌       |
+| `draft_ready` / `failed` | ❌    | ❌                     | ❌        | ❌             | ❌       |
+
+> 说明：当前 `schemas.py` 中的 `SpawnSubAgentDecision` 在 v1 被**移出主链路**（对应 §14 “可替换对象” 的 subagent 去留决定）。保留 type 以便复用 `capability_scout` / `recipe_challenger` 作为内部 tool，但不作为 Loop 直接产出的 decision。
+
+### A.2 `GraphAction`（受限图操作词表）
+
+`propose_action` 的唯一载荷。覆盖 v1 所有建图能力，**不允许 LLM 直接输出整张 graph JSON**。
+
+```python
+class AddNodeAction:
+    kind: Literal[“add_node”]
+    node_id: str                   # 必须唯一；DraftValidator 检查
+    node_type: Literal[“start”, “end”, “llm”, “rag”, “tts”, “agent”]
+    config: dict                   # 按 node_type 的配置 schema 校验
+
+class RemoveNodeAction:
+    kind: Literal[“remove_node”]
+    node_id: str                   # 必须存在
+
+class AddEdgeAction:
+    kind: Literal[“add_edge”]
+    source: str                    # node_id
+    target: str                    # node_id
+    # DraftValidator 检查：不产生环、端点存在
+
+class RemoveEdgeAction:
+    kind: Literal[“remove_edge”]
+    source: str
+    target: str
+
+class UpdateNodeConfigAction:
+    kind: Literal[“update_node_config”]
+    node_id: str
+    config_patch: dict             # 浅 merge；不允许整体替换 node_type
+
+class BindProviderAction:
+    kind: Literal[“bind_provider”]
+    node_id: str                   # 必须是 llm 节点
+    provider_id: str               # 必须存在于 Provider 表
+
+class BindKnowledgeBaseAction:
+    kind: Literal[“bind_kb”]
+    node_id: str                   # 必须是 rag 节点
+    kb_id: str
+
+class BindVoiceAction:
+    kind: Literal[“bind_voice”]
+    node_id: str                   # 必须是 tts 节点
+    voice_id: str
+
+class SetTemplateAction:
+    kind: Literal[“set_template”]
+    node_id: str
+    field: str                     # 如 “prompt” / “query”
+    expression: str                # 形如 “{nodeA.output}”；DraftValidator 检查引用可达
+
+class PlanningNoteAction:
+    kind: Literal[“planning_note”]
+    text: str                      # 写入 Workspace.planning_notes；不改 graph
+
+GraphAction = (
+    AddNodeAction | RemoveNodeAction
+    | AddEdgeAction | RemoveEdgeAction
+    | UpdateNodeConfigAction
+    | BindProviderAction | BindKnowledgeBaseAction | BindVoiceAction
+    | SetTemplateAction
+    | PlanningNoteAction
+)
+```
+
+> 说明：当前 `actions.py` 的 `CommitGraphAction` 被废弃 —— finalize 由 `FinalizeDecision` 触发，不再通过 action。
+
+### A.3 `Workspace`（会话真相来源）
+
+Loop 每轮的 observation 输入从 Workspace 投影生成；session resume 的唯一依据。
+
+```python
+class Workspace:
+    # --- 不可变事实 ---
+    session_id: str
+    goal: str
+    created_at: float
+
+    # --- 阶段状态 ---
+    phase: Literal[“clarifying”, “planning”, “waiting_user”,
+                   “finalizing”, “draft_ready”, “failed”]
+    clarify_rounds_used: int       # 上限 2
+    planning_rounds_used: int
+    finalize_attempts: int
+
+    # --- 澄清事实（clarifying 阶段累积） ---
+    clarified_facts: dict[str, Any]   # 如 {“需要知识库”: True, “风格”: “科普”}
+    pending_question: AskUserDecision | None
+
+    # --- 建图中间产物 ---
+    graph_draft: HarnessGraphDraft    # 沿用现有 schemas.py 定义
+    planning_notes: list[str]         # 来自 PlanningNoteAction；FIFO 上限 20
+
+    # --- Loop 反馈信号 ---
+    recent_observations: list[Observation]   # 环形窗口，上限 N=8
+    last_tool_results: dict[str, ToolResult] # 按 tool name 覆盖，只留最新
+    validator_findings: list[ValidatorFinding]  # 未被下一轮消费则滚动保留
+
+    # --- 重复失败检测（见 §10.5 升级规则） ---
+    repeat_finding_counter: dict[str, int]    # finding_id -> 连续出现次数
+
+    # --- 预算 ---
+    budget: Budget                    # 见 A.4
+
+    # --- 压缩摘要（超窗口后由 summarize_workspace tool 填充） ---
+    compressed_summary: str | None
+
+class Observation:
+    step_index: int
+    decision_kind: str
+    success: bool
+    summary: str                  # 短文本，≤ 500 char；长结果走 last_tool_results
+    finding_ids: list[str]        # 关联的 validator findings
+    timestamp: float
+```
+
+**上下文投影策略**（Loop 每轮喂给 LLM 的内容）：
+
+1. 永远包含：`goal`、`phase`、`clarified_facts`、`graph_draft` 摘要、`pending_question`、`validator_findings`
+2. 滚动包含：`recent_observations`（最多 8 条）
+3. 超预算时：用 `compressed_summary` 替换较早的 observations；触发条件：total prompt token > 80% 模型上下文
+
+### A.4 `Budget`（预算边界）
+
+```python
+class Budget:
+    max_clarify_rounds: int = 2
+    max_planning_rounds: int = 20
+    max_finalize_attempts: int = 3
+    max_tool_calls: int = 30
+    max_llm_tokens_total: int = 200_000   # session 累计
+    max_wall_clock_seconds: int = 600
+
+    # 运行时计数
+    clarify_rounds_used: int = 0
+    planning_rounds_used: int = 0
+    finalize_attempts_used: int = 0
+    tool_calls_used: int = 0
+    llm_tokens_used: int = 0
+    started_at: float
+```
+
+任一上限命中 → `phase = failed`，发 `session_failed` 事件，Workspace 持久化。
+
+### A.5 `Tool` 协议
+
+```python
+class ToolSpec:
+    name: str
+    description: str               # 给 LLM 看的单行描述
+    input_schema: type[BaseModel]  # Pydantic 模型
+    output_schema: type[BaseModel]
+    availability: Literal[“planning”, “runtime”, “both”]
+    side_effect_level: Literal[“none”, “draft_mutation”, “external”]
+    timeout_seconds: float = 10.0
+    audit_tag: str                 # 用于 trace 过滤
+
+class ToolResult:
+    tool_name: str
+    ok: bool
+    value: BaseModel | None        # 符合 output_schema
+    error: str | None              # 失败时非空
+    elapsed_ms: float
+    called_at: float
+```
+
+**v1 工具权限矩阵**（参见 §9）：
+
+| tool                       | planning | runtime | side_effect      |
+|----------------------------|:--------:|:-------:|------------------|
+| list_providers             | ✅       | ❌      | none             |
+| inspect_provider           | ✅       | ❌      | none             |
+| list_knowledge_bases       | ✅       | ❌      | none             |
+| peek_knowledge_base        | ✅       | ❌      | none             |
+| list_voices                | ✅       | ❌      | none             |
+| validate_graph_draft       | ✅       | ❌      | none             |
+| summarize_workspace        | ✅       | ❌      | none             |
+| search_knowledge           | ✅       | ✅      | none             |
+| draft_script_outline       | ✅       | ❌      | none             |
+| draft_script_section       | ✅       | ✅      | none             |
+| rewrite_for_tone           | ✅       | ✅      | none             |
+| compress_context           | ✅       | ✅      | none             |
+| select_voice_for_script    | ✅       | ✅      | none             |
+
+`side_effect_level = draft_mutation` 保留给未来可能的批量图操作 tool；v1 所有 tool 都是 `none`，图变更仅通过 `GraphAction` 进行。
+
+### A.6 `ValidatorFinding` 与升级规则（补 §10.5）
+
+```python
+class ValidatorFinding:
+    finding_id: str                # 稳定 hash：f”{rule_code}:{subject_key}”
+    severity: Literal[“warning”, “draft_error”, “finalize_error”]
+    rule_code: str                 # 如 “DUPLICATE_NODE_ID” / “DANGLING_EDGE”
+    subject_key: str               # 如 “node:llm_1” / “edge:a->b”
+    message: str
+    suggested_fix: str | None
+    created_at: float
+```
+
+**重复升级规则**：同一 `finding_id` 连续在 `validator_findings` 中存活 ≥ 3 轮（即 Loop 3 次提交后仍未消除）→ `phase = failed`，发 `session_failed` 事件并附 `reason = “validator_stuck”`。
+
+### A.7 `SSE` 事件载荷契约
+
+所有事件形如 `{event: <type>, data: {...}}`，`data` 必须包含 `session_id` 与 `ts`。以下只列关键载荷字段：
+
+| event                   | payload 关键字段                                       |
+|-------------------------|--------------------------------------------------------|
+| `session_start`         | `goal`, `phase=”clarifying”`                           |
+| `phase_changed`         | `from_phase`, `to_phase`                               |
+| `ask_user`              | `question_id`, `question`, `options?`                  |
+| `user_reply_received`   | `question_id`, `answer`                                |
+| `clarification_finalized` | `clarified_facts`                                    |
+| `tool_call`             | `tool_name`, `arguments`, `call_id`                    |
+| `tool_result`           | `call_id`, `ok`, `summary`, `elapsed_ms`               |
+| `graph_action_applied`  | `action`, `graph_snapshot_ref`                         |
+| `validator_findings`    | `findings: ValidatorFinding[]`, `phase`                |
+| `finalize_attempt`      | `attempt_no`                                           |
+| `draft_ready`           | `graph_snapshot`, `recipe?`, `planning_notes`          |
+| `session_failed`        | `reason`, `last_findings?`, `budget_used`              |
+| `budget_warning`        | `metric`, `used`, `limit`                              |
+
+`question_id` 跨 `ask_user` / `user_reply_received` / session resume 必须保持一致，是 pause-resume 的主键。
+
+### A.8 `HarnessSession` 持久化最小字段集
+
+```python
+class HarnessSessionRecord:
+    session_id: str                # PK
+    goal: str
+    phase: str
+    workspace_snapshot: str        # Workspace JSON
+    graph_draft_snapshot: str      # 最近一次有效 draft
+    pending_question_id: str | None
+    budget_used: dict              # 预算 metric -> used
+    status: Literal[“active”, “waiting_user”, “done”, “failed”]
+    created_at: float
+    updated_at: float
+```
+
+**恢复语义**：给定 `session_id`，从 `workspace_snapshot` 重建 Workspace → 根据 `phase` 决定下一步（若 `waiting_user` 则等待 `user_reply_received` 带 `question_id`）。不依赖 `events` 表做恢复推理。
