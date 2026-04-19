@@ -3,8 +3,10 @@ import type { NodeExecutionState, SSEEvent, StreamProgressDelta } from '../types
 
 type DebugMode = 'simple' | 'detailed'
 
-function compositeKey(nodeId: string, iterationIndex?: number | null): string {
-  return iterationIndex != null ? `${nodeId}#${iterationIndex}` : `${nodeId}#0`
+function compositeKey(nodeId: string, iterationIndex?: number | null, scopeId?: string | null): string {
+  const scope = scopeId ?? 'root'
+  const iter = iterationIndex != null ? iterationIndex : 0
+  return `${scope}:${nodeId}#${iter}`
 }
 
 interface DebugState {
@@ -114,7 +116,7 @@ export const useDebugStore = create<DebugState>((set, get) => ({
     const states = new Map(get().nodeStates)
 
     if (event.type === 'node_start' && event.node_id) {
-      const key = compositeKey(event.node_id, event.iteration_index)
+      const key = compositeKey(event.node_id, event.iteration_index, event.scope_id)
       states.set(key, {
         nodeId: event.node_id,
         nodeType: event.node_type,
@@ -125,7 +127,7 @@ export const useDebugStore = create<DebugState>((set, get) => ({
     }
 
     if (event.type === 'node_stream' && event.node_id) {
-      const key = compositeKey(event.node_id, event.iteration_index)
+      const key = compositeKey(event.node_id, event.iteration_index, event.scope_id)
       const existing = states.get(key) ?? {
         nodeId: event.node_id,
         nodeType: event.node_type,
@@ -153,7 +155,7 @@ export const useDebugStore = create<DebugState>((set, get) => ({
     }
 
     if (event.type === 'node_heartbeat' && event.node_id) {
-      const key = compositeKey(event.node_id, event.iteration_index)
+      const key = compositeKey(event.node_id, event.iteration_index, event.scope_id)
       const existing = states.get(key) ?? {
         nodeId: event.node_id,
         nodeType: event.node_type,
@@ -167,7 +169,7 @@ export const useDebugStore = create<DebugState>((set, get) => ({
     }
 
     if (event.type === 'node_end' && event.node_id) {
-      const key = compositeKey(event.node_id, event.iteration_index)
+      const key = compositeKey(event.node_id, event.iteration_index, event.scope_id)
       const existing = states.get(key) ?? {
         nodeId: event.node_id,
         nodeType: event.node_type,
@@ -222,7 +224,7 @@ export const useDebugStore = create<DebugState>((set, get) => ({
     let hasFailed = false
     let hasCompleted = false
     for (const [key, state] of states) {
-      if (key.startsWith(`${nodeId}#`)) {
+      if (key.includes(`:${nodeId}#`)) {
         if (state.status === 'running') hasRunning = true
         if (state.status === 'failed') hasFailed = true
         if (state.status === 'completed') hasCompleted = true

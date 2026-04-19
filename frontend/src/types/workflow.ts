@@ -107,4 +107,5 @@ export interface SSEEvent {
   index?: number
   total?: number
   iteration_index?: number
+  scope_id?: string
 }

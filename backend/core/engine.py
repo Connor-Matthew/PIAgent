@@ -3,6 +3,7 @@ import json
 import time
 from typing import Callable, Awaitable, Any
 
+from backend.core import events
 from backend.core.compiler import GraphCompiler
 from backend.core.run_context import RunContext
 from backend.core.state import WorkflowState
@@ -51,7 +52,7 @@ class ExecutionEngine:
 
         run_context = RunContext(on_event=on_event)
 
-        await self._emit(on_event, {"type": "workflow_start"})
+        await self._emit(on_event, events.workflow_start())
 
         try:
             await self._run_scope(
@@ -64,24 +65,28 @@ class ExecutionEngine:
             )
         except Exception:
             total_duration = round(time.time() - workflow_start, 3)
-            await self._emit(on_event, {
-                "type": "workflow_end",
-                "status": "failed",
-                "duration": total_duration,
-                "answer": state.get("answer", ""),
-                "outputs": state.get("outputs", {}),
-            })
+            await self._emit(
+                on_event,
+                events.workflow_end(
+                    status="failed",
+                    duration=total_duration,
+                    answer=state.get("answer", ""),
+                    outputs=state.get("outputs", {}),
+                ),
+            )
             raise
 
         total_duration = round(time.time() - workflow_start, 3)
 
-        await self._emit(on_event, {
-            "type": "workflow_end",
-            "status": "completed",
-            "duration": total_duration,
-            "answer": state.get("answer", ""),
-            "outputs": state.get("outputs", {}),
-        })
+        await self._emit(
+            on_event,
+            events.workflow_end(
+                status="completed",
+                duration=total_duration,
+                answer=state.get("answer", ""),
+                outputs=state.get("outputs", {}),
+            ),
+        )
 
         return state
 
@@ -106,7 +111,7 @@ class ExecutionEngine:
                 await self._run_iteration(compiled, node_id, state, on_event, run_context)
             else:
                 node = compiled.nodes[node_id]
-                await self._run_single(node, node_id, node_type, state, on_event, run_context, iteration_index)
+                await self._run_single(node, node_id, node_type, state, on_event, run_context, iteration_index, parent_id)
 
     async def _run_single(
         self,
@@ -117,16 +122,17 @@ class ExecutionEngine:
         on_event: Callable[[dict], Awaitable[None]] | None,
         run_context: RunContext | None = None,
         iteration_index: int | None = None,
+        scope_id: str | None = None,
     ) -> None:
-        event: dict = {
-            "type": "node_start",
-            "node_id": node_id,
-            "node_type": node_type,
-            "status": "running",
-        }
-        if iteration_index is not None:
-            event["iteration_index"] = iteration_index
-        await self._emit(on_event, event)
+        await self._emit(
+            on_event,
+            events.node_start(
+                node_id=node_id,
+                node_type=node_type,
+                scope_id=scope_id,
+                iteration_index=iteration_index,
+            ),
+        )
 
         node_start = time.time()
         try:
@@ -138,31 +144,33 @@ class ExecutionEngine:
             )
         except Exception as exc:
             duration = round(time.time() - node_start, 3)
-            event = {
-                "type": "node_end",
-                "node_id": node_id,
-                "node_type": node_type,
-                "status": "failed",
-                "duration": duration,
-                "error": str(exc),
-            }
-            if iteration_index is not None:
-                event["iteration_index"] = iteration_index
-            await self._emit(on_event, event)
+            await self._emit(
+                on_event,
+                events.node_end(
+                    node_id=node_id,
+                    node_type=node_type,
+                    status="failed",
+                    duration=duration,
+                    error=str(exc),
+                    scope_id=scope_id,
+                    iteration_index=iteration_index,
+                ),
+            )
             raise
         else:
             duration = round(time.time() - node_start, 3)
-            event = {
-                "type": "node_end",
-                "node_id": node_id,
-                "node_type": node_type,
-                "status": "completed",
-                "duration": duration,
-                "output": state.get("node_outputs", {}).get(node_id, {}),
-            }
-            if iteration_index is not None:
-                event["iteration_index"] = iteration_index
-            await self._emit(on_event, event)
+            await self._emit(
+                on_event,
+                events.node_end(
+                    node_id=node_id,
+                    node_type=node_type,
+                    status="completed",
+                    duration=duration,
+                    output=state.get("node_outputs", {}).get(node_id, {}),
+                    scope_id=scope_id,
+                    iteration_index=iteration_index,
+                ),
+            )
 
     async def _run_if_else(
         self,
@@ -177,12 +185,10 @@ class ExecutionEngine:
 
         branches = compiled.node_configs.get(if_else_id, {}).get("branches", [])
 
-        await self._emit(on_event, {
-            "type": "node_start",
-            "node_id": if_else_id,
-            "node_type": "if_else",
-            "status": "running",
-        })
+        await self._emit(
+            on_event,
+            events.node_start(node_id=if_else_id, node_type="if_else"),
+        )
 
         selected_branch = None
         for branch in branches:
@@ -198,12 +204,14 @@ class ExecutionEngine:
         branch_id = selected_branch["id"] if selected_branch else None
         condition_result = bool(selected_branch and selected_branch.get("condition") is not None)
 
-        await self._emit(on_event, {
-            "type": "branch_taken",
-            "node_id": if_else_id,
-            "branch_id": branch_id,
-            "condition_result": condition_result,
-        })
+        await self._emit(
+            on_event,
+            events.branch_taken(
+                node_id=if_else_id,
+                branch_id=branch_id,
+                condition_result=condition_result,
+            ),
+        )
 
         if selected_branch:
             children = compiled.children_by_parent.get(if_else_id, [])
@@ -236,13 +244,15 @@ class ExecutionEngine:
                 "result": None,
             }
 
-        await self._emit(on_event, {
-            "type": "node_end",
-            "node_id": if_else_id,
-            "node_type": "if_else",
-            "status": "completed",
-            "output": state["node_outputs"][if_else_id],
-        })
+        await self._emit(
+            on_event,
+            events.node_end(
+                node_id=if_else_id,
+                node_type="if_else",
+                status="completed",
+                output=state["node_outputs"][if_else_id],
+            ),
+        )
 
     async def _run_iteration(
         self,
@@ -260,12 +270,10 @@ class ExecutionEngine:
         error_strategy = config.get("errorStrategy", "fail_fast")
         max_concurrency = config.get("maxConcurrency", 5)
 
-        await self._emit(on_event, {
-            "type": "node_start",
-            "node_id": iter_id,
-            "node_type": "iteration",
-            "status": "running",
-        })
+        await self._emit(
+            on_event,
+            events.node_start(node_id=iter_id, node_type="iteration"),
+        )
 
         # Resolve inputRef
         if REF_RE.fullmatch(input_ref):
@@ -368,13 +376,15 @@ class ExecutionEngine:
             iter_output["errors"] = errors
         node_outputs[iter_id] = iter_output
 
-        await self._emit(on_event, {
-            "type": "node_end",
-            "node_id": iter_id,
-            "node_type": "iteration",
-            "status": "completed",
-            "output": node_outputs[iter_id],
-        })
+        await self._emit(
+            on_event,
+            events.node_end(
+                node_id=iter_id,
+                node_type="iteration",
+                status="completed",
+                output=node_outputs[iter_id],
+            ),
+        )
 
     async def _run_iter_item(
         self,
