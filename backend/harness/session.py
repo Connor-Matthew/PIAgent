@@ -13,7 +13,6 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable
 
-from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 
 from backend.harness.actions import BuilderError
@@ -386,7 +385,8 @@ class HarnessSession:
         target_wfid = workflow_id or self.workflow_id
         if target_wfid is None:
             # Create a new workflow
-            wf = Workflow(name=f"Harness: {self.goal[:40]}", graph_json=json.dumps(self.builder.snapshot(), ensure_ascii=False))
+            wf = Workflow(name=f"Harness: {self.goal[:40]}")
+            wf.graph = self.builder.snapshot()
             self.db.add(wf)
             self.db.commit()
             target_wfid = str(wf.id)
@@ -396,7 +396,7 @@ class HarnessSession:
                 raise ValueError(f"Workflow not found: {target_wfid}")
             # Save the current graph (user may have edited it on canvas)
             # Note: in v2, canvas is read-only during session, so this is the harness draft
-            wf.graph_json = json.dumps(self.builder.snapshot(), ensure_ascii=False)
+            wf.graph = self.builder.snapshot()
             self.db.commit()
 
         self.workflow_id = target_wfid
@@ -439,50 +439,16 @@ def create_harness_session(
     workspace_json = json.dumps({})
     created_at = datetime.now(timezone.utc)
 
-    bind = db.get_bind()
-    column_names = {
-        column["name"] for column in inspect(bind).get_columns("agent_sessions")
-    }
-
-    if {"user_goal", "turns_json"} & column_names:
-        values: dict[str, Any] = {
-            "id": session_id,
-            "goal": goal,
-            "status": "running",
-            "workspace_json": workspace_json,
-            "events_json": "[]",
-            "workflow_id": workflow_id,
-            "created_at": created_at,
-            "updated_at": created_at,
-        }
-        if "user_goal" in column_names:
-            values["user_goal"] = goal
-        if "turns_json" in column_names:
-            values["turns_json"] = "[]"
-
-        insert_columns = ", ".join(values.keys())
-        insert_params = ", ".join(f":{key}" for key in values)
-        db.execute(
-            text(
-                f"""
-                INSERT INTO agent_sessions ({insert_columns})
-                VALUES ({insert_params})
-                """
-            ),
-            values,
-        )
-        db.commit()
-    else:
-        db_session = AgentSession(
-            id=session_id,
-            goal=goal,
-            status="running",
-            workspace_json=workspace_json,
-            events_json="[]",
-            workflow_id=workflow_id,
-        )
-        db.add(db_session)
-        db.commit()
+    db_session = AgentSession(
+        id=session_id,
+        goal=goal,
+        status="running",
+        workspace_json=workspace_json,
+        events_json="[]",
+        workflow_id=workflow_id,
+    )
+    db.add(db_session)
+    db.commit()
 
     return HarnessSession(
         session_id=session_id,
