@@ -10,11 +10,7 @@ from backend.config import settings
 class TTSNode(BaseNode):
     node_type = "tts"
 
-    def _get_tts_provider(self):
-        provider_id = self.config.get("provider_id")
-        if not provider_id:
-            raise ValueError("provider_id is required for TTS node")
-
+    def _get_tts_provider_legacy(self, provider_id):
         db = SessionLocal()
         try:
             row = db.query(Provider).filter(Provider.id == provider_id).first()
@@ -22,17 +18,24 @@ class TTSNode(BaseNode):
                 raise ValueError(f"Provider not found: {provider_id}")
             if not row.enabled:
                 raise ValueError(f"Provider is disabled: {provider_id}")
-            provider = build_tts_provider(row)
+            return build_tts_provider(row)
         finally:
             db.close()
 
-        return provider
+    def _get_tts_provider(self, run_context=None):
+        provider_id = self.config.get("provider_id")
+        if not provider_id:
+            raise ValueError("provider_id is required for TTS node")
+
+        if run_context is not None:
+            return run_context.get_tts_provider(int(provider_id))
+        return self._get_tts_provider_legacy(provider_id)
 
     async def execute(self, state: WorkflowState, **kwargs) -> WorkflowState:
         text = state.get("llm_output") or state.get("input", "")
         on_event = kwargs.get("on_event")
 
-        provider = self._get_tts_provider()
+        provider = self._get_tts_provider(kwargs.get("run_context"))
         voice = self.config.get("voice_id", "default")
         emotion = self.config.get("emotion", "happy")
         speed = self.config.get("speed", 1.0)

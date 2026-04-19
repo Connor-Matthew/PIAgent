@@ -12,7 +12,19 @@ from backend.models.provider import Provider
 class LLMNode(BaseNode):
     node_type = "llm"
 
-    def _get_chat_model(self):
+    def _get_provider_legacy(self, provider_id):
+        db = SessionLocal()
+        try:
+            row = db.query(Provider).filter(Provider.id == provider_id).first()
+            if not row:
+                raise ValueError(f"Provider not found: {provider_id}")
+            if not row.enabled:
+                raise ValueError(f"Provider is disabled: {provider_id}")
+            return build_provider(row)
+        finally:
+            db.close()
+
+    def _get_chat_model(self, run_context=None):
         provider_id = self.config.get("provider_id")
         model_name = self.config.get("model", "gpt-4o")
         temperature = self.config.get("temperature", 0.7)
@@ -21,16 +33,10 @@ class LLMNode(BaseNode):
         if not provider_id:
             raise ValueError("provider_id is required for LLM node")
 
-        db = SessionLocal()
-        try:
-            row = db.query(Provider).filter(Provider.id == provider_id).first()
-            if not row:
-                raise ValueError(f"Provider not found: {provider_id}")
-            if not row.enabled:
-                raise ValueError(f"Provider is disabled: {provider_id}")
-            provider = build_provider(row)
-        finally:
-            db.close()
+        if run_context is not None:
+            provider = run_context.get_llm_provider(int(provider_id))
+        else:
+            provider = self._get_provider_legacy(provider_id)
 
         return provider.create_chat_model(
             model=model_name,
@@ -39,7 +45,7 @@ class LLMNode(BaseNode):
         )
 
     async def execute(self, state: WorkflowState, **kwargs) -> WorkflowState:
-        chat_model = self._get_chat_model()
+        chat_model = self._get_chat_model(kwargs.get("run_context"))
         on_event = kwargs.get("on_event")
 
         messages = []

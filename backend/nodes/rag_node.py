@@ -16,6 +16,7 @@ class RAGNode(BaseNode):
         query = state.get("input", "")
         retriever = self._get_retriever()
         on_event = kwargs.get("on_event")
+        # run_context = kwargs.get("run_context")  # reserved for future use
 
         async with self.heartbeat(on_event, message="检索知识库中..."):
             docs = await retriever.ainvoke(query)

@@ -35,14 +35,7 @@ AVAILABLE_TOOLS = {
 class AgentNode(BaseNode):
     node_type = "agent"
 
-    def _build_agent(self):
-        provider_id = self.config.get("provider_id")
-        model_name = self.config.get("model", "gpt-4o")
-        temperature = self.config.get("temperature", 0.7)
-
-        if not provider_id:
-            raise ValueError("provider_id is required for Agent node")
-
+    def _build_agent_legacy(self, provider_id, model_name, temperature):
         db = SessionLocal()
         try:
             row = db.query(Provider).filter(Provider.id == provider_id).first()
@@ -53,6 +46,20 @@ class AgentNode(BaseNode):
             provider = build_provider(row)
         finally:
             db.close()
+        return provider
+
+    def _build_agent(self, run_context=None):
+        provider_id = self.config.get("provider_id")
+        model_name = self.config.get("model", "gpt-4o")
+        temperature = self.config.get("temperature", 0.7)
+
+        if not provider_id:
+            raise ValueError("provider_id is required for Agent node")
+
+        if run_context is not None:
+            provider = run_context.get_llm_provider(int(provider_id))
+        else:
+            provider = self._build_agent_legacy(provider_id, model_name, temperature)
 
         llm = provider.create_chat_model(model=model_name, temperature=temperature, streaming=True)
 
@@ -68,7 +75,7 @@ class AgentNode(BaseNode):
         return create_react_agent(llm, tools, prompt=system_prompt)
 
     async def execute(self, state: WorkflowState, **kwargs) -> WorkflowState:
-        agent = self._build_agent()
+        agent = self._build_agent(kwargs.get("run_context"))
         on_event = kwargs.get("on_event")
 
         messages = state.get("messages", [])

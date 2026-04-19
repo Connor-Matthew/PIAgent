@@ -4,6 +4,7 @@ import time
 from typing import Callable, Awaitable, Any
 
 from backend.core.compiler import GraphCompiler
+from backend.core.run_context import RunContext
 from backend.core.state import WorkflowState
 from backend.core.template import REF_RE, resolve_reference
 
@@ -48,6 +49,8 @@ class ExecutionEngine:
         self._user_input = user_input
         workflow_start = time.time()
 
+        run_context = RunContext(on_event=on_event)
+
         await self._emit(on_event, {"type": "workflow_start"})
 
         try:
@@ -57,6 +60,7 @@ class ExecutionEngine:
                 state=state,
                 on_event=on_event,
                 parent_id=None,
+                run_context=run_context,
             )
         except Exception:
             total_duration = round(time.time() - workflow_start, 3)
@@ -88,6 +92,7 @@ class ExecutionEngine:
         state: WorkflowState,
         on_event: Callable[[dict], Awaitable[None]] | None,
         parent_id: str | None,
+        run_context: RunContext | None = None,
         iteration_index: int | None = None,
     ) -> None:
         """Execute a sequence of nodes within a scope (top-level or subgraph)."""
@@ -96,12 +101,12 @@ class ExecutionEngine:
             node_type = node_def["type"]
 
             if node_type == "if_else":
-                await self._run_if_else(compiled, node_id, state, on_event, iteration_index)
+                await self._run_if_else(compiled, node_id, state, on_event, run_context, iteration_index)
             elif node_type == "iteration":
-                await self._run_iteration(compiled, node_id, state, on_event)
+                await self._run_iteration(compiled, node_id, state, on_event, run_context)
             else:
                 node = compiled.nodes[node_id]
-                await self._run_single(node, node_id, node_type, state, on_event, iteration_index)
+                await self._run_single(node, node_id, node_type, state, on_event, run_context, iteration_index)
 
     async def _run_single(
         self,
@@ -110,6 +115,7 @@ class ExecutionEngine:
         node_type: str,
         state: WorkflowState,
         on_event: Callable[[dict], Awaitable[None]] | None,
+        run_context: RunContext | None = None,
         iteration_index: int | None = None,
     ) -> None:
         event: dict = {
@@ -124,7 +130,12 @@ class ExecutionEngine:
 
         node_start = time.time()
         try:
-            state = await node.execute(state, user_input=self._user_input, on_event=on_event)
+            state = await node.execute(
+                state,
+                user_input=self._user_input,
+                on_event=on_event,
+                run_context=run_context,
+            )
         except Exception as exc:
             duration = round(time.time() - node_start, 3)
             event = {
@@ -159,6 +170,7 @@ class ExecutionEngine:
         if_else_id: str,
         state: WorkflowState,
         on_event: Callable[[dict], Awaitable[None]] | None,
+        run_context: RunContext | None = None,
         iteration_index: int | None = None,
     ) -> None:
         from backend.nodes.if_else_node import IfElseNode
@@ -205,7 +217,7 @@ class ExecutionEngine:
                 **state,
                 "node_outputs": dict(state.get("node_outputs", {})),
             }
-            await self._run_scope(compiled, branch_children, branch_state, on_event, if_else_id, iteration_index)
+            await self._run_scope(compiled, branch_children, branch_state, on_event, if_else_id, run_context, iteration_index)
 
             output_field = selected_branch.get("outputField")
             result = None
@@ -238,6 +250,7 @@ class ExecutionEngine:
         iter_id: str,
         state: WorkflowState,
         on_event: Callable[[dict], Awaitable[None]] | None,
+        run_context: RunContext | None = None,
     ) -> None:
         config = compiled.node_configs.get(iter_id, {})
         input_ref = config.get("inputRef", "")
@@ -282,7 +295,7 @@ class ExecutionEngine:
 
                 try:
                     child_state = await self._run_iter_item(
-                        i, item, children, state, on_event, compiled, iter_id, item_var, index_var
+                        i, item, children, state, on_event, compiled, iter_id, item_var, index_var, run_context
                     )
                     results[i] = self._extract_output_field(child_state, output_field)
                     await self._emit(on_event, {
@@ -318,7 +331,7 @@ class ExecutionEngine:
                     })
                     try:
                         child_state = await self._run_iter_item(
-                            i, item, children, state, on_event, compiled, iter_id, item_var, index_var
+                            i, item, children, state, on_event, compiled, iter_id, item_var, index_var, run_context
                         )
                         results[i] = self._extract_output_field(child_state, output_field)
                         await self._emit(on_event, {
@@ -374,6 +387,7 @@ class ExecutionEngine:
         iter_id: str,
         item_var: str,
         index_var: str,
+        run_context: RunContext | None = None,
     ) -> WorkflowState:
         child_state: WorkflowState = {
             **parent_state,
@@ -392,6 +406,7 @@ class ExecutionEngine:
             state=child_state,
             on_event=on_event,
             parent_id=iter_id,
+            run_context=run_context,
             iteration_index=index,
         )
         return child_state
