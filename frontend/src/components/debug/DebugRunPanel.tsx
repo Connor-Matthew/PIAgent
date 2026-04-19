@@ -11,10 +11,12 @@ export function DebugRunPanel() {
   const {
     mode, isRunning, inputText, runInputs,
     finalAnswer, finalOutputs,
-    setMode, setInputText, setRunInput, startRun,
+    workflowId: activeWorkflowId,
+    runId: activeRunId,
+    setMode, setInputText, setRunInput, startRun, attachRun, markStopped,
   } = useDebugStore()
   const { workflowId, workflowName, nodes, toGraphJSON } = useWorkflowStore()
-  const { connect } = useSSE()
+  const { connect, disconnect } = useSSE()
 
   const startNode = useMemo(() => {
     return nodes.find((n) => n.data.nodeType === 'start')
@@ -22,7 +24,8 @@ export function DebugRunPanel() {
 
   const startInputs = useMemo<StartInputField[]>(() => {
     const config = startNode?.data.config || {}
-    return (config.inputs as StartInputField[]) || []
+    const raw = config.inputs
+    return Array.isArray(raw) ? (raw as StartInputField[]) : []
   }, [startNode])
 
   const handleRun = async () => {
@@ -50,7 +53,20 @@ export function DebugRunPanel() {
     }
 
     const result = await workflowApi.run(workflowId, payload)
+    if (!useDebugStore.getState().isRunning) {
+      await workflowApi.stopRun(workflowId, result.run_id).catch(() => undefined)
+      return
+    }
+    attachRun(workflowId, result.run_id)
     connect(workflowId, result.run_id)
+  }
+
+  const handleStop = async () => {
+    if (activeWorkflowId && activeRunId) {
+      await workflowApi.stopRun(activeWorkflowId, activeRunId).catch(() => undefined)
+    }
+    disconnect()
+    markStopped('已手动停止执行')
   }
 
   const canRun = startInputs.length > 0
@@ -116,13 +132,25 @@ export function DebugRunPanel() {
             </div>
           </div>
         )}
-        <button
-          onClick={handleRun}
-          disabled={!canRun}
-          className="w-full bg-blue-500 text-white rounded-lg py-2 text-sm hover:bg-blue-600 disabled:opacity-50"
-        >
-          {isRunning ? '运行中...' : '▶ 开始运行'}
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={handleRun}
+            disabled={!canRun}
+            className="flex-1 bg-blue-500 text-white rounded-lg py-2 text-sm hover:bg-blue-600 disabled:opacity-50"
+          >
+            {isRunning ? '运行中...' : '▶ 开始运行'}
+          </button>
+          {isRunning && (
+            <button
+              onClick={() => {
+                void handleStop()
+              }}
+              className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-2 text-sm text-rose-100 hover:bg-rose-500/20"
+            >
+              停止执行
+            </button>
+          )}
+        </div>
 
         {/* Mode toggle */}
         <div className="flex gap-2">

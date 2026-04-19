@@ -7,6 +7,8 @@ interface DebugState {
   isOpen: boolean
   mode: DebugMode
   isRunning: boolean
+  workflowId: string | null
+  runId: string | null
   inputText: string
   runInputs: Record<string, unknown>
   nodeStates: Map<string, NodeExecutionState>
@@ -23,11 +25,13 @@ interface DebugState {
   setRunInput: (name: string, value: unknown) => void
   setRunInputs: (inputs: Record<string, unknown>) => void
   startRun: () => void
+  attachRun: (workflowId: string, runId: string) => void
   finishRun: (patch?: {
     duration?: number | null
     finalAnswer?: string | null
     finalOutputs?: Record<string, unknown> | null
   }) => void
+  markStopped: (message?: string) => void
   handleSSEEvent: (event: SSEEvent) => void
   reset: () => void
 }
@@ -36,6 +40,8 @@ export const useDebugStore = create<DebugState>((set, get) => ({
   isOpen: false,
   mode: 'detailed',
   isRunning: false,
+  workflowId: null,
+  runId: null,
   inputText: '',
   runInputs: {},
   nodeStates: new Map(),
@@ -62,6 +68,8 @@ export const useDebugStore = create<DebugState>((set, get) => ({
   startRun: () =>
     set({
       isRunning: true,
+      workflowId: null,
+      runId: null,
       nodeStates: new Map(),
       audioUrl: null,
       totalDuration: null,
@@ -69,12 +77,29 @@ export const useDebugStore = create<DebugState>((set, get) => ({
       finalOutputs: null,
     }),
 
+  attachRun: (workflowId, runId) =>
+    set({
+      workflowId,
+      runId,
+    }),
+
   finishRun: (patch) =>
     set({
       isRunning: false,
+      workflowId: null,
+      runId: null,
       totalDuration: patch?.duration ?? get().totalDuration,
       finalAnswer: patch?.finalAnswer ?? get().finalAnswer,
       finalOutputs: patch?.finalOutputs ?? get().finalOutputs,
+    }),
+
+  markStopped: (message) =>
+    set({
+      isRunning: false,
+      workflowId: null,
+      runId: null,
+      finalAnswer: message ?? '已手动停止执行',
+      finalOutputs: null,
     }),
 
   handleSSEEvent: (event) => {
@@ -159,11 +184,14 @@ export const useDebugStore = create<DebugState>((set, get) => ({
     }
 
     if (event.type === 'workflow_end') {
+      const isCancelled = event.status === 'cancelled'
       set({
         isRunning: false,
+        workflowId: null,
+        runId: null,
         totalDuration: event.duration ?? null,
-        finalAnswer: event.answer ?? null,
-        finalOutputs: event.outputs ?? null,
+        finalAnswer: isCancelled ? (event.message ?? '已手动停止执行') : (event.answer ?? null),
+        finalOutputs: isCancelled ? null : (event.outputs ?? null),
       })
       // Also derive audio_url from final outputs if present
       if (event.outputs?.audio_url) {
@@ -175,6 +203,8 @@ export const useDebugStore = create<DebugState>((set, get) => ({
   reset: () =>
     set({
       isRunning: false,
+      workflowId: null,
+      runId: null,
       nodeStates: new Map(),
       audioUrl: null,
       totalDuration: null,

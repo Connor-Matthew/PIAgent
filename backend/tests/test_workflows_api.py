@@ -97,6 +97,21 @@ def test_stream_run_events(client):
     assert '"outputs"' in text
 
 
+def test_stop_run_marks_run_cancelled(client):
+    create_resp = client.post("/api/workflows", json={"name": "Stop Test", "graph": SAMPLE_GRAPH})
+    wf_id = create_resp.json()["id"]
+    run_resp = client.post(f"/api/workflows/{wf_id}/run", json={"input": "hello"})
+    run_id = run_resp.json()["run_id"]
+
+    stop_resp = client.post(f"/api/workflows/{wf_id}/runs/{run_id}/stop")
+    assert stop_resp.status_code == 200
+    assert stop_resp.json()["status"] == "cancelled"
+
+    events_resp = client.get(f"/api/workflows/{wf_id}/runs/{run_id}/events")
+    assert events_resp.status_code == 200
+    assert '"status": "cancelled"' in events_resp.text
+
+
 def test_run_workflow_with_inputs(client):
     graph = {
         "nodes": [
@@ -147,5 +162,4 @@ def test_update_workflow_with_duplicate_id_returns_400(client):
     }
     resp = client.put(f"/api/workflows/{wf_id}", json={"graph": bad_graph})
     assert resp.status_code == 400
-
 

@@ -1,29 +1,21 @@
 import { useState } from 'react'
 
-import { useAgentAutoRun } from '../../hooks/useAgentAutoRun'
-import { useAgentSession } from '../../hooks/useAgentSession'
+import { useHarnessSession } from '../../hooks/useHarnessSession'
 
 export function AgentPanel() {
   const [goal, setGoal] = useState('')
   const {
-    autoRun,
-    isAutoRunning,
-  } = useAgentAutoRun()
-  const {
-    isBusy,
     createSession,
-  } = useAgentSession()
+    isConnecting,
+    status,
+  } = useHarnessSession()
+
+  const isBusy = isConnecting || status === 'running' || status === 'awaiting_user'
 
   const handleCreateSession = () => {
     const trimmedGoal = goal.trim()
     if (!trimmedGoal) return
     void createSession(trimmedGoal).catch(() => undefined)
-  }
-
-  const handleAutoRun = () => {
-    const trimmedGoal = goal.trim()
-    if (!trimmedGoal) return
-    void autoRun(trimmedGoal).catch(() => undefined)
   }
 
   return (
@@ -44,17 +36,10 @@ export function AgentPanel() {
         <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={handleCreateSession}
-            disabled={isBusy || isAutoRunning || !goal.trim()}
+            disabled={isBusy || !goal.trim()}
             className="rounded-lg bg-cyan-400 px-4 py-2.5 text-sm font-medium text-slate-950 hover:bg-cyan-300 disabled:opacity-50"
           >
-            {isBusy ? '处理中...' : '生成草案'}
-          </button>
-          <button
-            onClick={handleAutoRun}
-            disabled={isBusy || isAutoRunning || !goal.trim()}
-            className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-4 py-2.5 text-sm font-medium text-cyan-100 hover:bg-cyan-500/20 disabled:opacity-50"
-          >
-            {isAutoRunning ? '可视化运行中...' : '一键搭图并运行'}
+            {isBusy ? '生成中...' : '生成工作流'}
           </button>
         </div>
       </div>

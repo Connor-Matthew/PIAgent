@@ -104,7 +104,7 @@ function StartNodeConfig({
   config: Record<string, unknown>
   updateConfig: (key: string, value: unknown) => void
 }) {
-  const inputs = (config.inputs as StartInputField[]) || []
+  const inputs: StartInputField[] = Array.isArray(config.inputs) ? (config.inputs as StartInputField[]) : []
 
   const addField = () => {
     updateConfig('inputs', [
@@ -213,7 +213,7 @@ function EndNodeConfig({
   currentNodeId: string
 }) {
   const { nodes } = useWorkflowStore()
-  const outputs = (config.outputs as EndOutputField[]) || []
+  const outputs: EndOutputField[] = Array.isArray(config.outputs) ? (config.outputs as EndOutputField[]) : []
   const answer = (config.answer as string) || ''
   const answerRef = useRef<HTMLTextAreaElement>(null)
 
@@ -221,7 +221,8 @@ function EndNodeConfig({
 
   const getNodeFields = (nodeType: string, nodeId: string): string[] => {
     if (nodeType === 'start') {
-      const startInputs = (nodes.find((n) => n.id === nodeId)?.data.config.inputs as StartInputField[]) || []
+      const rawInputs = nodes.find((n) => n.id === nodeId)?.data.config.inputs
+      const startInputs: StartInputField[] = Array.isArray(rawInputs) ? (rawInputs as StartInputField[]) : []
       return startInputs.map((i) => i.name)
     }
     return NODE_OUTPUT_FIELDS[nodeType as keyof typeof NODE_OUTPUT_FIELDS] || []

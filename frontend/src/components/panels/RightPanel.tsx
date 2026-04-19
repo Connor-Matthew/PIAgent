@@ -1,7 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useWorkflowStore } from '../../stores/workflowStore'
-import { useAgentStore } from '../../stores/agentStore'
-import { useAutoRunStore } from '../../stores/autoRunStore'
+import { useHarnessStore } from '../../stores/harnessStore'
 import { useDebugStore } from '../../stores/debugStore'
 import { NodeConfig } from './NodeConfig'
 import { AgentStatusPanel } from '../agent/AgentStatusPanel'
@@ -9,24 +8,53 @@ import { DebugRunPanel } from '../debug/DebugRunPanel'
 
 type TabKey = 'config' | 'agent' | 'run'
 
+function readAgentActivity() {
+  const harness = useHarnessStore.getState()
+  const debug = useDebugStore.getState()
+  return Boolean(
+    harness.sessionId ||
+    harness.isRunning ||
+    harness.events.length > 0 ||
+    debug.isRunning
+  )
+}
+
 export function RightPanel() {
-  const [manualTab, setManualTab] = useState<TabKey>('config')
+  const [manualTab, setManualTab] = useState<TabKey>(() => (
+    readAgentActivity() ? 'agent' : 'config'
+  ))
   const selectedNodeId = useWorkflowStore((s) => s.selectedNodeId)
-  const session = useAgentStore((s) => s.session)
-  const isAutoRunning = useAutoRunStore((s) => s.isRunning)
+  const sessionId = useHarnessStore((s) => s.sessionId)
+  const isHarnessRunning = useHarnessStore((s) => s.isRunning)
+  const harnessEventCount = useHarnessStore((s) => s.events.length)
   const debugIsRunning = useDebugStore((s) => s.isRunning)
   const debugIsOpen = useDebugStore((s) => s.isOpen)
+  const agentHasActivity = Boolean(sessionId || isHarnessRunning || harnessEventCount > 0 || debugIsRunning)
 
-  const activeTab: TabKey =
-    debugIsOpen || debugIsRunning
-      ? 'run'
-      : session || isAutoRunning
-        ? 'agent'
-        : manualTab
+  useEffect(() => {
+    let hadAgentActivity = readAgentActivity()
+    const switchToAgentOnFirstActivity = () => {
+      const nextAgentActivity = readAgentActivity()
+      if (nextAgentActivity && !hadAgentActivity) {
+        setManualTab('agent')
+      }
+      hadAgentActivity = nextAgentActivity
+    }
+
+    const unsubscribeHarness = useHarnessStore.subscribe(switchToAgentOnFirstActivity)
+    const unsubscribeDebug = useDebugStore.subscribe(switchToAgentOnFirstActivity)
+
+    return () => {
+      unsubscribeHarness()
+      unsubscribeDebug()
+    }
+  }, [])
+
+  const activeTab: TabKey = manualTab
 
   const tabs: { key: TabKey; label: string; badge?: boolean }[] = [
     { key: 'config', label: '节点配置', badge: !!selectedNodeId },
-    { key: 'agent', label: 'Agent', badge: !!session || !!isAutoRunning },
+    { key: 'agent', label: 'Agent', badge: agentHasActivity || debugIsOpen },
     { key: 'run', label: '运行', badge: debugIsRunning || debugIsOpen },
   ]
 

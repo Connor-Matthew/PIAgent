@@ -1,214 +1,260 @@
-from __future__ import annotations
+"""PIAgent Harness v2 — Core schemas for Decision, GraphAction, and validation."""
 
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
-
-
-class HarnessGraphDraft(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    nodes: list[dict] = Field(default_factory=list)
-    edges: list[dict] = Field(default_factory=list)
-    planning_notes: list[str] = Field(default_factory=list)
-    committed: bool = False
-
-    @property
-    def graph(self) -> dict:
-        return {
-            "nodes": self.nodes,
-            "edges": self.edges,
-        }
+from pydantic import BaseModel, Field, TypeAdapter
 
 
-class SkillInvocation(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+# ───────────────────────────────────────────────
+# GraphAction primitives (what ProposeAction carries)
+# ───────────────────────────────────────────────
 
-    name: str = Field(min_length=1)
-    arguments: dict[str, Any] = Field(default_factory=dict)
-
-
-class SkillResult(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    name: str = Field(min_length=1)
-    ok: bool = True
-    value: Any = None
-    error: str | None = None
-    events: list[dict] = Field(default_factory=list)
+class AddNodeAction(BaseModel):
+    kind: Literal["add_node"] = "add_node"
+    node_type: str
+    node_id: str | None = Field(default=None, description="Auto-generated if omitted")
+    config: dict = Field(default_factory=dict)
 
 
-class HarnessRunResult(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    goal: str
-    route: Literal["fast", "harness"]
-    graph: dict
-    state: dict[str, Any] | None = None
-    recipe: dict | None = None
-    events: list[dict] = Field(default_factory=list)
-    planning_notes: list[str] = Field(default_factory=list)
-    defaults_applied: bool = False
-    session_id: str | None = None
+class AddEdgeAction(BaseModel):
+    kind: Literal["add_edge"] = "add_edge"
+    source: str
+    target: str
 
 
-class SubAgentReport(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    agent_name: str
-    observations: list[dict] = Field(default_factory=list)
-    warnings: list[str] = Field(default_factory=list)
+class UpdateNodeConfigAction(BaseModel):
+    kind: Literal["update_node_config"] = "update_node_config"
+    node_id: str
+    config: dict
 
 
-class GraphCriticReport(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    risks: list[dict] = Field(default_factory=list)
-    score: int = Field(default=100, ge=0, le=100)
+class DeleteNodeAction(BaseModel):
+    kind: Literal["delete_node"] = "delete_node"
+    node_id: str
 
 
-class CapabilityScoutReport(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    recommendations: list[dict] = Field(default_factory=list)
-    reasoning: str = Field(default="")
-    warnings: list[str] = Field(default_factory=list)
+class DeleteEdgeAction(BaseModel):
+    kind: Literal["delete_edge"] = "delete_edge"
+    source: str
+    target: str
 
 
-class RecipeChallengerReport(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    score: int = Field(default=100, ge=0, le=100)
-    concerns: list[str] = Field(default_factory=list)
-    alternatives: list[str] = Field(default_factory=list)
-    reasoning: str = Field(default="")
+GraphAction = Annotated[
+    AddNodeAction | AddEdgeAction | UpdateNodeConfigAction | DeleteNodeAction | DeleteEdgeAction,
+    Field(discriminator="kind"),
+]
 
 
-class PlanStep(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+# ───────────────────────────────────────────────
+# Decision discriminated union (what LeadAgent emits)
+# ───────────────────────────────────────────────
 
-    type: Literal["skill", "action", "finish"]
-    name: str | None = None
-    input: dict | None = None
-    action: dict | None = None
-
-
-class LeadAgentPlan(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    reasoning: str = Field(min_length=1)
-    steps: list[PlanStep] = Field(default_factory=list)
-
-
-class HarnessSessionRead(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    session_id: str
-    goal: str
-    route: Literal["fast", "harness"]
-    status: str
-    graph: dict | None = None
-    recipe: dict | None = None
-    events: list[dict] = Field(default_factory=list)
-
-
-class LeadDecision(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    reasoning: str
-    action: dict | None = None
-    skill: str | None = None
-    skill_input: dict | None = None
-    done: bool = False
-
-
-class DecisionObservation(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    step_index: int
-    action_taken: str
-    success: bool
-    error: str | None = None
-    graph_snapshot: dict | None = None
-    skill_result_summary: str | None = None
-
-
-class CallToolDecision(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+class CallTool(BaseModel):
     kind: Literal["call_tool"] = "call_tool"
-    name: str = Field(min_length=1)
-    arguments: dict[str, Any] = Field(default_factory=dict)
+    tool: str
+    args: dict = Field(default_factory=dict)
 
 
-class SpawnSubAgentDecision(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    kind: Literal["spawn_subagent"] = "spawn_subagent"
-    name: str = Field(min_length=1)
-    brief: str = Field(min_length=1)
+class LoadSkill(BaseModel):
+    kind: Literal["load_skill"] = "load_skill"
+    skill: str
 
 
-class ProposeActionDecision(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+class ProposeAction(BaseModel):
     kind: Literal["propose_action"] = "propose_action"
-    action: dict = Field(min_length=1)
+    action: GraphAction
 
 
-class AskUserDecision(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+class AskUser(BaseModel):
     kind: Literal["ask_user"] = "ask_user"
-    question: str = Field(min_length=1)
-    options: list[str] | None = None
+    question: str
+    options: list[str] | None = Field(default=None, description="If provided, render as choice buttons")
 
 
-class FinalizeDecision(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+class Finalize(BaseModel):
     kind: Literal["finalize"] = "finalize"
-    reasoning: str = Field(default="")
+    reason: str
 
 
-DecisionV2 = (
-    CallToolDecision
-    | SpawnSubAgentDecision
-    | ProposeActionDecision
-    | AskUserDecision
-    | FinalizeDecision
-)
+Decision = Annotated[
+    CallTool | LoadSkill | ProposeAction | AskUser | Finalize,
+    Field(discriminator="kind"),
+]
+
+_DECISION_ADAPTER = TypeAdapter(Decision)
 
 
-class LoopTraceEntry(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+def _normalize_graph_action_payload(payload: Any) -> Any:
+    if not isinstance(payload, dict):
+        return payload
 
-    step_index: int
-    decision: DecisionV2
-    observation: DecisionObservation
-    timestamp: float
+    normalized = dict(payload)
+    if "kind" not in normalized and isinstance(normalized.get("type"), str):
+        normalized["kind"] = normalized["type"]
+
+    kind = normalized.get("kind")
+
+    if kind == "add_node":
+        node = normalized.get("node")
+        if isinstance(node, dict):
+            normalized.setdefault("node_type", node.get("type") or node.get("node_type"))
+            normalized.setdefault("node_id", node.get("id") or node.get("node_id"))
+            node_config = node.get("data")
+            if node_config is None:
+                node_config = node.get("config")
+            if node_config is not None:
+                normalized.setdefault("config", node_config)
+        if "node_type" not in normalized:
+            nt = normalized.get("type") if normalized.get("type") != kind else None
+            if nt is None:
+                nt = normalized.get("nodeType") or normalized.get("kind_of_node")
+            if nt is not None:
+                normalized["node_type"] = nt
+        if "node_id" not in normalized:
+            nid = normalized.get("id") or normalized.get("nodeId")
+            if nid is not None:
+                normalized["node_id"] = nid
+        normalized.setdefault("config", {})
+
+    elif kind == "add_edge":
+        edge = normalized.get("edge")
+        if isinstance(edge, dict):
+            normalized.setdefault(
+                "source",
+                edge.get("source") or edge.get("from_node") or edge.get("from"),
+            )
+            normalized.setdefault(
+                "target",
+                edge.get("target") or edge.get("to_node") or edge.get("to"),
+            )
+        if "source" not in normalized:
+            src = normalized.get("from_node") or normalized.get("from") or normalized.get("source_id")
+            if src is not None:
+                normalized["source"] = src
+        if "target" not in normalized:
+            tgt = normalized.get("to_node") or normalized.get("to") or normalized.get("target_id")
+            if tgt is not None:
+                normalized["target"] = tgt
+
+    elif kind == "update_node_config":
+        node = normalized.get("node")
+        if isinstance(node, dict):
+            normalized.setdefault("node_id", node.get("id") or node.get("node_id"))
+        config = normalized.get("patch")
+        if config is None:
+            config = normalized.get("config")
+        if config is None and isinstance(node, dict):
+            config = node.get("data") or node.get("config")
+        normalized["config"] = config or {}
+
+    elif kind == "delete_node":
+        node = normalized.get("node")
+        if isinstance(node, dict):
+            normalized.setdefault("node_id", node.get("id") or node.get("node_id"))
+
+    elif kind == "delete_edge":
+        edge = normalized.get("edge")
+        if isinstance(edge, dict):
+            normalized.setdefault(
+                "source",
+                edge.get("source") or edge.get("from_node") or edge.get("from"),
+            )
+            normalized.setdefault(
+                "target",
+                edge.get("target") or edge.get("to_node") or edge.get("to"),
+            )
+        if "source" not in normalized:
+            src = normalized.get("from_node") or normalized.get("from") or normalized.get("source_id")
+            if src is not None:
+                normalized["source"] = src
+        if "target" not in normalized:
+            tgt = normalized.get("to_node") or normalized.get("to") or normalized.get("target_id")
+            if tgt is not None:
+                normalized["target"] = tgt
+
+    return normalized
 
 
-def decision_v2_to_lead_decision(decision: DecisionV2) -> LeadDecision:
-    """Adapter: DecisionV2 -> old LeadDecision for boundary compatibility."""
-    if isinstance(decision, CallToolDecision):
-        return LeadDecision(
-            reasoning=f"调用工具: {decision.name}",
-            skill=decision.name,
-            skill_input=decision.arguments,
+def normalize_decision_payload(payload: Any) -> Any:
+    if not isinstance(payload, dict):
+        return payload
+
+    normalized = dict(payload)
+
+    if "kind" not in normalized:
+        legacy_kind = normalized.get("decision")
+        if isinstance(legacy_kind, str):
+            normalized["kind"] = legacy_kind
+        elif normalized.get("done") is True:
+            normalized["kind"] = "finalize"
+        elif "action" in normalized:
+            normalized["kind"] = "propose_action"
+
+    if normalized.get("kind") == "call_skill":
+        normalized["kind"] = "load_skill"
+
+    if normalized.get("kind") in {"validate_graph", "validate", "commit", "commit_graph", "submit", "done"}:
+        reason = (
+            normalized.get("reason")
+            or normalized.get("reasoning")
+            or normalized.get("summary")
+            or "graph is ready to validate and submit"
         )
-    if isinstance(decision, SpawnSubAgentDecision):
-        return LeadDecision(
-            reasoning=f"启动子 Agent: {decision.name}",
-            skill="spawn_subagent",
-            skill_input={"name": decision.name, "brief": decision.brief},
-        )
-    if isinstance(decision, ProposeActionDecision):
-        return LeadDecision(
-            reasoning="提出图操作",
-            action=decision.action,
-        )
-    if isinstance(decision, AskUserDecision):
-        return LeadDecision(
-            reasoning=f"询问用户: {decision.question}",
-            action={"kind": "planning_update", "text": f"需要澄清: {decision.question}"},
-        )
-    if isinstance(decision, FinalizeDecision):
-        return LeadDecision(
-            reasoning=decision.reasoning or " finalize graph",
-            done=True,
-        )
-    raise ValueError(f"Unknown DecisionV2 type: {type(decision)}")
+        return {"kind": "finalize", "reason": reason}
+
+    kind = normalized.get("kind")
+
+    if kind == "call_tool":
+        if "tool" not in normalized:
+            tool_name = normalized.get("tool_name") or normalized.get("name")
+            if tool_name is not None:
+                normalized["tool"] = tool_name
+        if "args" not in normalized:
+            args = normalized.get("arguments")
+            if args is None:
+                args = normalized.get("tool_input")
+            if args is None:
+                args = normalized.get("skill_input")
+            normalized["args"] = args or {}
+
+    elif kind == "load_skill":
+        if "skill" not in normalized:
+            skill_name = normalized.get("skill_name") or normalized.get("name")
+            if skill_name is not None:
+                normalized["skill"] = skill_name
+
+    elif kind == "propose_action":
+        action = _normalize_graph_action_payload(normalized.get("action"))
+        if isinstance(action, dict) and action.get("kind") == "commit_graph":
+            return {
+                "kind": "finalize",
+                "reason": normalized.get("reason")
+                or normalized.get("reasoning")
+                or "graph is ready to submit",
+            }
+        normalized["action"] = action
+
+    elif kind == "finalize":
+        if "reason" not in normalized:
+            reason = normalized.get("reasoning") or normalized.get("summary")
+            if reason is None and normalized.get("done") is True:
+                reason = "graph is ready to submit"
+            if reason is not None:
+                normalized["reason"] = reason
+
+    return normalized
+
+
+def validate_decision_payload(payload: Any) -> Decision:
+    return _DECISION_ADAPTER.validate_python(normalize_decision_payload(payload))
+
+
+# ───────────────────────────────────────────────
+# Validation findings
+# ───────────────────────────────────────────────
+
+class Finding(BaseModel):
+    severity: Literal["error", "warning"]
+    code: str
+    message: str
+    node_id: str | None = Field(default=None)

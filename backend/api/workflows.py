@@ -1,7 +1,8 @@
 import json
 import asyncio
+import contextlib
 import time
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -14,6 +15,7 @@ from backend.core.engine import ExecutionEngine
 from backend.core.compiler import GraphCompiler, CompilerError, CycleDetectedError
 
 router = APIRouter(prefix="/api/workflows", tags=["workflows"])
+RUN_TASKS: dict[str, asyncio.Task] = {}
 
 
 class WorkflowCreate(BaseModel):
@@ -176,8 +178,45 @@ async def run_workflow(workflow_id: str, body: RunCreate, db: Session = Depends(
     }
 
 
+@router.post("/{workflow_id}/runs/{run_id}/stop")
+async def stop_run(workflow_id: str, run_id: str, db: Session = Depends(get_db)):
+    run = await run_in_threadpool(lambda: db.query(WorkflowRun).filter(WorkflowRun.id == run_id).first())
+    if not run or run.workflow_id != workflow_id:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    if run.status in {"completed", "failed", "cancelled"}:
+        return {
+            "run_id": run.id,
+            "status": run.status,
+            "message": "Run already finished",
+        }
+
+    run.status = "cancelled"
+    run.output = {
+        "message": "Execution cancelled by user",
+        "answer": "",
+        "outputs": {},
+    }
+    await run_in_threadpool(lambda: db.commit())
+
+    task = RUN_TASKS.get(run_id)
+    if task is not None and not task.done():
+        task.cancel()
+
+    return {
+        "run_id": run.id,
+        "status": "cancelled",
+        "message": "Execution cancelled by user",
+    }
+
+
 @router.get("/{workflow_id}/runs/{run_id}/events")
-async def stream_run_events(workflow_id: str, run_id: str, db: Session = Depends(get_db)):
+async def stream_run_events(
+    workflow_id: str,
+    run_id: str,
+    request: Request,
+    db: Session = Depends(get_db),
+):
     """SSE endpoint for real-time workflow execution events."""
     wf = await run_in_threadpool(lambda: db.query(Workflow).filter(Workflow.id == workflow_id).first())
     if not wf:
@@ -193,7 +232,7 @@ async def stream_run_events(workflow_id: str, run_id: str, db: Session = Depends
     if not run or run.workflow_id != workflow_id:
         raise HTTPException(status_code=404, detail="Run not found")
 
-    if run.status in {"completed", "failed"}:
+    if run.status in {"completed", "failed", "cancelled"}:
         payload = {
             "type": "workflow_end",
             "status": run.status,
@@ -201,11 +240,21 @@ async def stream_run_events(workflow_id: str, run_id: str, db: Session = Depends
             "answer": run.output.get("answer", ""),
             "outputs": run.output.get("outputs", {}),
         }
+        if run.status == "cancelled":
+            payload["message"] = run.output.get("message", "Execution cancelled by user")
 
         async def replay_generator():
             yield f"event: workflow_end\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
-        return StreamingResponse(replay_generator(), media_type="text/event-stream")
+        return StreamingResponse(
+            replay_generator(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
 
     # Decode persisted input
     try:
@@ -225,6 +274,7 @@ async def stream_run_events(workflow_id: str, run_id: str, db: Session = Depends
 
         async def on_event(event):
             await queue.put(event)
+            await asyncio.sleep(0)
 
         engine = ExecutionEngine()
 
@@ -239,28 +289,70 @@ async def stream_run_events(workflow_id: str, run_id: str, db: Session = Depends
                 run.output = serializable_result
                 run.duration = round(time.time() - started_at, 3)
                 await run_in_threadpool(lambda: db.commit())
+            except asyncio.CancelledError:
+                cancelled_duration = round(time.time() - started_at, 3)
+                await on_event({
+                    "type": "workflow_end",
+                    "status": "cancelled",
+                    "duration": cancelled_duration,
+                    "answer": "",
+                    "outputs": {},
+                    "message": "Execution cancelled by user",
+                })
+                run.status = "cancelled"
+                run.output = {
+                    "message": "Execution cancelled by user",
+                    "answer": "",
+                    "outputs": {},
+                }
+                run.duration = cancelled_duration
+                await run_in_threadpool(lambda: db.commit())
+                raise
             except Exception as exc:
                 run.status = "failed"
                 run.output = {"error": str(exc)}
                 run.duration = round(time.time() - started_at, 3)
                 await run_in_threadpool(lambda: db.commit())
             finally:
+                RUN_TASKS.pop(run_id, None)
                 await queue.put(None)
 
         task = asyncio.create_task(execute())
+        RUN_TASKS[run_id] = task
 
-        while True:
-            event = await queue.get()
-            if event is None:
-                break
-            if event.get("type") == "workflow_end" and event.get("status") == "failed":
+        try:
+            while True:
+                if await request.is_disconnected():
+                    if not task.done():
+                        task.cancel()
+                    break
+
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=0.25)
+                except asyncio.TimeoutError:
+                    continue
+
+                if event is None:
+                    break
+                if event.get("type") == "workflow_end" and event.get("status") == "failed":
+                    yield f"event: {event['type']}\ndata: {json.dumps(event, ensure_ascii=False)}\n\n"
+                    break
                 yield f"event: {event['type']}\ndata: {json.dumps(event, ensure_ascii=False)}\n\n"
-                break
-            yield f"event: {event['type']}\ndata: {json.dumps(event, ensure_ascii=False)}\n\n"
+        finally:
+            if not task.done():
+                task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
 
-        await task
-
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.get("/{workflow_id}/runs")
