@@ -110,12 +110,16 @@ def _upgrade_v1_node(node_def: dict[str, Any]) -> dict[str, Any]:
     # Everything else becomes config
     config: dict[str, Any] = {}
     for key, value in data.items():
-        if key in ("parentId", "branchId", "label", "locked", "nodeType"):
+        if key in ("parentId", "branchId", "label", "locked", "nodeType", "config"):
             continue
         config[key] = value
 
     # If the caller already had a flat v1 shape with top-level fields mixed
     # into ``data`` (e.g. provider_id, prompt), those are now in config.
+    nested_config = data.get("config")
+    if isinstance(nested_config, dict):
+        config.update(nested_config)
+
     result["config"] = config
     return result
 
@@ -155,3 +159,36 @@ def dump_graph(graph: WorkflowGraph) -> dict[str, Any]:
     The returned dict is safe to send to the frontend or store in the DB.
     """
     return graph.model_dump(by_alias=True, exclude_none=False)
+
+
+def get_node_config(node: WorkflowNode | dict[str, Any]) -> dict[str, Any]:
+    if isinstance(node, WorkflowNode):
+        return dict(node.config or {})
+    if isinstance(node.get("config"), dict):
+        return dict(node["config"])
+    data = node.get("data") if isinstance(node.get("data"), dict) else {}
+    if isinstance(data.get("config"), dict):
+        return dict(data["config"])
+    return {
+        key: value
+        for key, value in data.items()
+        if key not in ("parentId", "branchId", "label", "locked", "nodeType")
+    }
+
+
+def get_node_parent_id(node: WorkflowNode | dict[str, Any]) -> str | None:
+    if isinstance(node, WorkflowNode):
+        return node.parentId
+    if isinstance(node.get("parentId"), str):
+        return node["parentId"]
+    data = node.get("data") if isinstance(node.get("data"), dict) else {}
+    return data.get("parentId") if isinstance(data.get("parentId"), str) else None
+
+
+def get_node_branch_id(node: WorkflowNode | dict[str, Any]) -> str | None:
+    if isinstance(node, WorkflowNode):
+        return node.branchId
+    if isinstance(node.get("branchId"), str):
+        return node["branchId"]
+    data = node.get("data") if isinstance(node.get("data"), dict) else {}
+    return data.get("branchId") if isinstance(data.get("branchId"), str) else None
