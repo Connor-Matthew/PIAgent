@@ -90,16 +90,20 @@ export function reactFlowToGraph(
   nodes: Node<ReactFlowNodeData>[],
   edges: Edge[]
 ): WorkflowGraphV2 {
-  const graphNodes: WorkflowNodeV2[] = nodes.map((n) => ({
-    id: n.id,
-    type: n.data.nodeType,
-    position: n.position,
-    ...(n.parentNode ? { parentId: n.parentNode } : {}),
-    ...(n.data.branchId ? { branchId: n.data.branchId } : {}),
-    label: n.data.label,
-    locked: n.data.locked,
-    config: n.data.config,
-  }))
+  const graphNodes: WorkflowNodeV2[] = nodes.map((n) => {
+    // Strip UI-only transient fields so they do not leak into persisted config
+    const { visualState, visualLabel, statusNote, ...cleanConfig } = n.data.config
+    return {
+      id: n.id,
+      type: n.data.nodeType,
+      position: n.position,
+      ...(n.parentNode ? { parentId: n.parentNode } : {}),
+      ...(n.data.branchId ? { branchId: n.data.branchId } : {}),
+      label: n.data.label,
+      locked: n.data.locked,
+      config: cleanConfig,
+    }
+  })
 
   const graphEdges: WorkflowEdgeV2[] = edges.map((e) => ({
     id: e.id,

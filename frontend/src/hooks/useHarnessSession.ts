@@ -7,10 +7,6 @@ import { HARNESS_EVENT_TYPES, type HarnessEvent } from '../types/harness'
 
 let activeEventSource: EventSource | null = null
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
-}
-
 interface UseHarnessSessionOptions {
   autoConnect?: boolean
 }
@@ -47,6 +43,7 @@ export function useHarnessSession(options: UseHarnessSessionOptions = {}) {
   const setDraftWorkflow = useWorkflowStore((s) => s.setDraftWorkflow)
   const setWorkflow = useWorkflowStore((s) => s.setWorkflow)
   const setHarnessLocked = useWorkflowStore((s) => s.setHarnessLocked)
+  const setAllNodeVisuals = useWorkflowStore((s) => s.setAllNodeVisuals)
 
   const disconnect = useCallback(() => {
     if (activeEventSource) {
@@ -87,19 +84,12 @@ export function useHarnessSession(options: UseHarnessSessionOptions = {}) {
       case 'graph_update': {
         if (event.snapshot) {
           setGraphSnapshot(event.snapshot)
-          setDraftSnapshot(
-            'Harness Draft',
-            event.snapshot.nodes.map((node) => ({
-              ...node,
-              config: {
-                ...(isRecord(node.config) ? node.config : {}),
-                visualState: 'building',
-                visualLabel: 'BUILD',
-                statusNote: 'Harness 正在放置节点',
-              },
-            })),
-            event.snapshot.edges
-          )
+          setDraftSnapshot('Harness Draft', event.snapshot.nodes, event.snapshot.edges)
+          setAllNodeVisuals({
+            visualState: 'building',
+            visualLabel: 'BUILD',
+            statusNote: 'Harness 正在放置节点',
+          })
         }
         break
       }
@@ -159,7 +149,7 @@ export function useHarnessSession(options: UseHarnessSessionOptions = {}) {
         break
       }
     }
-  }, [appendEvent, setStatus, setGoal, setGraphSnapshot, setDraftSnapshot, setOpenQuestion, disconnect, setError, setDraftWorkflow])
+  }, [appendEvent, setStatus, setGoal, setGraphSnapshot, setDraftSnapshot, setOpenQuestion, disconnect, setError, setDraftWorkflow, setAllNodeVisuals])
 
   const connect = useCallback((id: string) => {
     disconnect()

@@ -10,6 +10,7 @@ import { graphToReactFlow, reactFlowToGraph } from './adapters'
 describe('WorkflowGraphV2 round-trip', () => {
   it('preserves linear DAG nodes and edges', () => {
     const original = loadGraph({
+      version: 2,
       nodes: [
         { id: 'start_1', type: 'start', position: { x: 0, y: 0 }, config: {} },
         { id: 'llm_1', type: 'llm', position: { x: 200, y: 0 }, config: { provider_id: 1 } },
@@ -32,6 +33,7 @@ describe('WorkflowGraphV2 round-trip', () => {
 
   it('preserves if-else parentId and branchId', () => {
     const original = loadGraph({
+      version: 2,
       nodes: [
         { id: 'start_1', type: 'start', position: { x: 0, y: 0 }, config: {} },
         {
@@ -78,6 +80,7 @@ describe('WorkflowGraphV2 round-trip', () => {
 
   it('preserves iteration parentId', () => {
     const original = loadGraph({
+      version: 2,
       nodes: [
         { id: 'start_1', type: 'start', position: { x: 0, y: 0 }, config: {} },
         {
@@ -110,6 +113,7 @@ describe('WorkflowGraphV2 round-trip', () => {
 
   it('preserves edge sourceHandle', () => {
     const original = loadGraph({
+      version: 2,
       nodes: [{ id: 'a', type: 'start', position: { x: 0, y: 0 }, config: {} }],
       edges: [{ source: 'a', target: 'b', sourceHandle: 'true' }],
     })
@@ -157,6 +161,12 @@ describe('WorkflowGraphV2 round-trip', () => {
     const original = loadGraph({
       nodes: [
         { id: 'start_1', type: 'start', data: { inputs: [] } },
+        {
+          id: 'if_1',
+          type: 'if_else',
+          position: { x: 50, y: 50 },
+          data: { branches: [{ id: 'true' }] },
+        },
         {
           id: 'llm_true',
           type: 'llm',
