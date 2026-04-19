@@ -16,6 +16,8 @@ import type {
   WorkflowGraphEdge,
   WorkflowGraphNode,
 } from '../types/workflow'
+import { graphToReactFlow, reactFlowToGraph } from '../graph/adapters'
+import { loadGraph } from '../graph/contract'
 
 type WorkflowNodeInput = Node<WorkflowNodeData> | WorkflowGraphNode
 type WorkflowEdgeInput =
@@ -118,16 +120,28 @@ function getNodeConfig(rawData: Record<string, unknown>) {
 }
 
 function normalizeGraphNode(input: WorkflowNodeInput) {
-  const rawData = isRecord(input.data) ? input.data : {}
-  const nodeType = getNodeType(rawData.nodeType ?? input.type)
-  const label = typeof rawData.label === 'string' ? rawData.label : nodeType
-  const locked =
-    isStartOrEnd(nodeType) || (typeof rawData.locked === 'boolean' ? rawData.locked : undefined)
-  const config = getNodeConfig(rawData)
+  // Detect v2 graph node (no .data property) vs React Flow node
+  const isV2Node = !('data' in input)
+  const rawData = isRecord((input as any).data) ? (input as any).data : {}
+
+  const nodeType = getNodeType(isV2Node ? input.type : rawData.nodeType ?? input.type)
+  const label = isV2Node
+    ? (input as any).label ?? nodeType
+    : typeof rawData.label === 'string'
+      ? rawData.label
+      : nodeType
+  const locked = isV2Node
+    ? (input as any).locked
+    : isStartOrEnd(nodeType) || (typeof rawData.locked === 'boolean' ? rawData.locked : undefined)
+  const config = isV2Node
+    ? (isRecord((input as any).config) ? (input as any).config : {})
+    : getNodeConfig(rawData)
 
   // Map backend parentId <=> React Flow parentNode + extent
   const parentNode =
-    (input as any).parentNode || (typeof rawData.parentId === 'string' ? rawData.parentId : undefined)
+    (input as any).parentNode ||
+    (typeof (input as any).parentId === 'string' ? (input as any).parentId : undefined) ||
+    (typeof rawData.parentId === 'string' ? rawData.parentId : undefined)
   const extent = parentNode ? ('parent' as const) : undefined
 
   return {
@@ -141,7 +155,7 @@ function normalizeGraphNode(input: WorkflowNodeInput) {
       nodeType,
       locked,
       config,
-      ...pickUiData(rawData),
+      ...(isV2Node ? {} : pickUiData(rawData)),
     },
   } satisfies Node<WorkflowNodeData>
 }
@@ -327,27 +341,38 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     }),
 
   setWorkflow: (id, name, graphNodes, edges) => {
-    const nodes = normalizeGraphNodes(graphNodes)
-    set({ workflowId: id, workflowName: name, nodes, edges: normalizeGraphEdges(edges), isDraft: false })
+    const graph = loadGraph({ nodes: graphNodes, edges })
+    const converted = graphToReactFlow(graph)
+    set({
+      workflowId: id,
+      workflowName: name,
+      nodes: normalizeGraphNodes(converted.nodes),
+      edges: normalizeGraphEdges(converted.edges),
+      isDraft: false,
+    })
   },
 
-  setDraftSnapshot: (name, graphNodes, edges) =>
+  setDraftSnapshot: (name, graphNodes, edges) => {
+    const graph = loadGraph({ nodes: graphNodes, edges })
+    const converted = graphToReactFlow(graph)
     set({
       workflowId: null,
       workflowName: name,
-      nodes: graphNodes.map((node) => normalizeGraphNode(node)),
-      edges: normalizeGraphEdges(edges),
+      nodes: normalizeGraphNodes(converted.nodes),
+      edges: normalizeGraphEdges(converted.edges),
       isDraft: true,
       selectedNodeId: null,
-    }),
+    })
+  },
 
   setDraftWorkflow: (name, graphNodes, edges) => {
-    const nodes = normalizeGraphNodes(graphNodes)
+    const graph = loadGraph({ nodes: graphNodes, edges })
+    const converted = graphToReactFlow(graph)
     set({
       workflowId: null,
       workflowName: name,
-      nodes,
-      edges: normalizeGraphEdges(edges),
+      nodes: normalizeGraphNodes(converted.nodes),
+      edges: normalizeGraphEdges(converted.edges),
       isDraft: true,
       selectedNodeId: null,
     })
@@ -357,24 +382,6 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 
   toGraphJSON: () => {
     const { nodes, edges } = get()
-    return {
-      nodes: nodes.map((n) => ({
-        id: n.id,
-        type: n.data.nodeType,
-        position: n.position,
-        data: {
-          label: n.data.label,
-          nodeType: n.data.nodeType,
-          locked: n.data.locked,
-          ...(n.parentNode ? { parentId: n.parentNode } : {}),
-          ...n.data.config,
-        },
-      })),
-      edges: edges.map((e) => ({
-        source: e.source,
-        target: e.target,
-        ...(e.sourceHandle ? { sourceHandle: e.sourceHandle } : {}),
-      })),
-    } as WorkflowGraph
+    return reactFlowToGraph(nodes, edges)
   },
 }))

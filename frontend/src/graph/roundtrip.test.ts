@@ -152,4 +152,31 @@ describe('WorkflowGraphV2 round-trip', () => {
     expect(upgraded.nodes[0].type).toBe('if_else')
     expect(upgraded.nodes[1].type).toBe('iteration')
   })
+
+  it('saves React Flow state as canonical v2 graph', () => {
+    const original = loadGraph({
+      nodes: [
+        { id: 'start_1', type: 'start', data: { inputs: [] } },
+        {
+          id: 'llm_true',
+          type: 'llm',
+          position: { x: 100, y: 100 },
+          data: { parentId: 'if_1', branchId: 'true', provider_id: 1 },
+        },
+      ],
+      edges: [],
+    })
+
+    const { nodes, edges } = graphToReactFlow(original)
+    const saved = reactFlowToGraph(nodes, edges)
+
+    expect(saved.version).toBe(2)
+    expect(saved.nodes[1]).toMatchObject({
+      id: 'llm_true',
+      parentId: 'if_1',
+      branchId: 'true',
+      config: { provider_id: 1 },
+    })
+    expect('data' in saved.nodes[1]).toBe(false)
+  })
 })

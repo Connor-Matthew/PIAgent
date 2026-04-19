@@ -8,21 +8,30 @@ import { RightPanel } from './components/panels/RightPanel'
 import { useWorkflowStore, defaultStartNode, defaultEndNode } from './stores/workflowStore'
 import { useDebugStore } from './stores/debugStore'
 import { workflowApi } from './services/api'
-import type { WorkflowGraph, WorkflowGraphNode } from './types/workflow'
+import type { WorkflowGraph } from './types/workflow'
 import ProvidersPage from './pages/Providers'
-
-function toWorkflowGraphNode(node: typeof defaultStartNode | typeof defaultEndNode): WorkflowGraphNode {
-  return {
-    id: node.id,
-    type: node.type ?? node.data.nodeType,
-    position: node.position,
-    data: { ...node.data },
-  }
-}
 
 function createDefaultGraph(): WorkflowGraph {
   return {
-    nodes: [toWorkflowGraphNode(defaultStartNode), toWorkflowGraphNode(defaultEndNode)],
+    version: 2,
+    nodes: [
+      {
+        id: 'start_1',
+        type: 'start',
+        position: defaultStartNode.position,
+        label: defaultStartNode.data.label,
+        locked: true,
+        config: defaultStartNode.data.config,
+      },
+      {
+        id: 'end_1',
+        type: 'end',
+        position: defaultEndNode.position,
+        label: defaultEndNode.data.label,
+        locked: true,
+        config: defaultEndNode.data.config,
+      },
+    ],
     edges: [],
   }
 }

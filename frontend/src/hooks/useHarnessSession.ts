@@ -7,6 +7,10 @@ import { HARNESS_EVENT_TYPES, type HarnessEvent } from '../types/harness'
 
 let activeEventSource: EventSource | null = null
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
 interface UseHarnessSessionOptions {
   autoConnect?: boolean
 }
@@ -87,8 +91,8 @@ export function useHarnessSession(options: UseHarnessSessionOptions = {}) {
             'Harness Draft',
             event.snapshot.nodes.map((node) => ({
               ...node,
-              data: {
-                ...(node.data || {}),
+              config: {
+                ...(isRecord(node.config) ? node.config : {}),
                 visualState: 'building',
                 visualLabel: 'BUILD',
                 statusNote: 'Harness 正在放置节点',

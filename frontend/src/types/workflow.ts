@@ -29,26 +29,15 @@ export interface WorkflowNodeData {
   statusNote?: string
 }
 
-export interface WorkflowGraph {
-  nodes: Array<{
-    id: string
-    type: string
-    position?: {
-      x: number
-      y: number
-    }
-    data: Record<string, unknown>
-  }>
-  edges: Array<{
-    id?: string
-    source: string
-    target: string
-    sourceHandle?: string
-  }>
-}
+import type {
+  WorkflowGraphV2,
+  WorkflowNodeV2,
+  WorkflowEdgeV2,
+} from '../graph/contract'
 
-export type WorkflowGraphNode = WorkflowGraph['nodes'][number]
-export type WorkflowGraphEdge = WorkflowGraph['edges'][number]
+export type WorkflowGraph = WorkflowGraphV2
+export type WorkflowGraphNode = WorkflowNodeV2
+export type WorkflowGraphEdge = WorkflowEdgeV2
 
 export interface Workflow {
   id: string
