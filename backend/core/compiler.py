@@ -36,6 +36,9 @@ class CompiledWorkflow:
     children_by_parent: dict[str, list[str]]        # parent_id -> child node ids in subgraph topo order
     edges_by_source: dict[str, list[dict]]          # adjacency list for debugging / future use
     node_defs: dict[str, dict]                      # original node definitions
+    node_configs: dict[str, dict]                   # node_id -> config dict
+    parent_by_node: dict[str, str | None]           # node_id -> parentId
+    branch_by_node: dict[str, str | None]           # node_id -> branchId
 
 
 class CycleDetectedError(Exception):
@@ -284,10 +287,20 @@ class GraphCompiler:
             ]
             children_by_parent[pid] = self._scope_topological_sort(child_ids, scope_edges)
 
+        node_configs = {node_id: get_node_config(node_def) for node_id, node_def in node_map.items()}
+        parent_by_node = {node_id: self._get_parent_id(node_def) for node_id, node_def in node_map.items()}
+        branch_by_node = {
+            node_id: node_def.get("branchId") if isinstance(node_def.get("branchId"), str) else None
+            for node_id, node_def in node_map.items()
+        }
+
         return CompiledWorkflow(
             nodes=instantiated,
             top_level_order=top_level_order,
             children_by_parent=children_by_parent,
             edges_by_source=dict(edges_by_source),
             node_defs=node_map,
+            node_configs=node_configs,
+            parent_by_node=parent_by_node,
+            branch_by_node=branch_by_node,
         )

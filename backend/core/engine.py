@@ -4,7 +4,6 @@ import time
 from typing import Callable, Awaitable, Any
 
 from backend.core.compiler import GraphCompiler
-from backend.core.graph_schema import get_node_branch_id, get_node_config
 from backend.core.state import WorkflowState
 from backend.core.template import REF_RE, resolve_reference
 
@@ -164,8 +163,7 @@ class ExecutionEngine:
     ) -> None:
         from backend.nodes.if_else_node import IfElseNode
 
-        node_def = compiled.node_defs[if_else_id]
-        branches = get_node_config(node_def).get("branches", [])
+        branches = compiled.node_configs.get(if_else_id, {}).get("branches", [])
 
         await self._emit(on_event, {
             "type": "node_start",
@@ -200,7 +198,7 @@ class ExecutionEngine:
             branch_children = [
                 cid
                 for cid in children
-                if get_node_branch_id(compiled.node_defs[cid]) == branch_id
+                if compiled.branch_by_node.get(cid) == branch_id
             ]
 
             branch_state = {
@@ -241,8 +239,7 @@ class ExecutionEngine:
         state: WorkflowState,
         on_event: Callable[[dict], Awaitable[None]] | None,
     ) -> None:
-        node_def = compiled.node_defs[iter_id]
-        config = get_node_config(node_def)
+        config = compiled.node_configs.get(iter_id, {})
         input_ref = config.get("inputRef", "")
         item_var = config.get("itemVar", "item")
         index_var = config.get("indexVar", "index")
