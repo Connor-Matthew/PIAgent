@@ -56,7 +56,7 @@ Key flow: `api/workflows.py` receives run request → creates `WorkflowRun` reco
 
 **Provider system:** LLM providers (OpenAI, Anthropic, Google, DeepSeek) stored in DB as `Provider` model with encrypted API keys (`core/crypto.py` uses Fernet). Provider CRUD at `api/providers.py`. LLM nodes resolve their provider at execution time.
 
-**Harness mode:** `backend/harness/` implements the natural-language workflow builder. The `AgentPanel` collects a user goal → `/api/harness/sessions` creates a `HarnessSession` → the SSE stream drives the LeadAgent loop → tools and skills gather facts → `GraphBuilder` emits graph updates → `Finalize` validates the draft → `apply` persists the workflow. `/api/agent/*` has been retired.
+**Harness mode:** `backend/pi_harness/` implements the natural-language workflow builder. The `AgentPanel` collects a user goal → `/api/harness/sessions` creates a `pi_harness` session → the SSE stream drives the vendored mini-harness ReAct runtime → tools and skills gather facts → `WorkflowGraphDraft` emits graph updates → `finalize_draft` validates the draft → `apply` persists the workflow. `/api/pi_harness/*` remains as a compatibility alias during migration.
 
 **API routes:** All under `/api/` prefix — `workflows`, `knowledge`, `providers`, `harness`.
 
