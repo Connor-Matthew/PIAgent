@@ -93,24 +93,6 @@ _NODE_CONFIG_SCHEMAS: dict[str, dict] = {
         },
         "required": ["provider_id"],
     },
-    "agent": {
-        "type": "object",
-        "properties": {
-            "provider_id": {
-                "type": "integer",
-                "description": "ID of the LLM provider to use.",
-            },
-            "model": {"type": "string", "default": "gpt-4o"},
-            "temperature": {"type": "number", "default": 0.7},
-            "system_prompt": {"type": "string"},
-            "tools": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": "Names of tools available to the agent node.",
-            },
-        },
-        "required": ["provider_id"],
-    },
 }
 
 _NODE_DESCRIPTIONS: dict[str, str] = {
@@ -119,8 +101,9 @@ _NODE_DESCRIPTIONS: dict[str, str] = {
     "llm": "Calls an LLM provider with a configurable model, temperature, and system prompt.",
     "rag": "Retrieves relevant documents from a knowledge base using vector search.",
     "tts": "Converts text to speech using a TTS provider with voice and emotion settings.",
-    "agent": "Runs a ReAct agent with tool-calling capabilities.",
 }
+
+_AUTHORING_EXCLUDED_NODE_TYPES = {"agent"}
 
 
 class ListNodeTypesTool:
@@ -136,6 +119,8 @@ class ListNodeTypesTool:
     async def run(self, args: BaseModel, ctx: HarnessContext) -> ListNodeTypesOutput:
         nodes: list[NodeTypeInfo] = []
         for node_type in node_registry.list_types():
+            if node_type in _AUTHORING_EXCLUDED_NODE_TYPES:
+                continue
             nodes.append(
                 NodeTypeInfo(
                     node_type=node_type,

@@ -19,7 +19,6 @@ const NODE_GROUPS = [
     label: '大模型',
     items: [
       { type: 'llm' as NodeType, icon: '🧠', label: 'LLM 对话', color: 'bg-purple-500' },
-      { type: 'agent' as NodeType, icon: '🤖', label: 'ReAct Agent', color: 'bg-pink-500' },
     ],
   },
   {

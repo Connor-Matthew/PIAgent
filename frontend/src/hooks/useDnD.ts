@@ -30,23 +30,24 @@ export function useDnD() {
         y: event.clientY,
       })
 
-      const labels: Record<NodeType, string> = {
+      const labels: Partial<Record<NodeType, string>> = {
         start: '用户输入',
         llm: 'LLM 对话',
         rag: 'RAG 知识检索',
-        agent: 'ReAct Agent',
         tts: 'TTS 音频合成',
         end: '结束',
         if_else: 'If-Else 分支',
         iteration: 'Iteration 循环',
       }
+      const label = labels[nodeType]
+      if (!label) return
 
       addNode({
         id: getId(),
         type: nodeType,
         position,
         data: {
-          label: labels[nodeType],
+          label,
           nodeType,
           config: {},
         } satisfies WorkflowNodeData,

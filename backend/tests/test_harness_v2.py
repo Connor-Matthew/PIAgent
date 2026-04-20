@@ -14,8 +14,10 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from backend.api.harness import _wire_session
+from backend.harness.actions import BuilderError
 from backend.harness.builder import GraphBuilder
 from backend.harness.tools import ToolRegistry
+from backend.harness.tools.base import HarnessContext
 from backend.harness.tools.list_node_types import ListNodeTypesTool
 from backend.harness.tools.list_skills import ListSkillsTool
 from backend.harness.schemas import (
@@ -93,6 +95,13 @@ def test_builder_add_node():
     assert len(snap["nodes"]) == 1
     assert snap["nodes"][0]["id"] == "start_1"
     assert snap["nodes"][0]["type"] == "start"
+
+
+def test_builder_rejects_agent_node_in_authoring_flow():
+    b = GraphBuilder()
+
+    with pytest.raises(BuilderError, match="Agent nodes are runtime-only"):
+        b.apply(AddNodeAction(node_type="agent", node_id="agent_1"))
 
 
 def test_builder_add_edge():
@@ -731,6 +740,18 @@ def test_skill_loader_catalog():
     names = {s["name"] for s in catalog}
     assert "rag_qa" in names
     assert "llm_basic" in names
+    assert "agent_node" not in names
+
+
+@pytest.mark.asyncio
+async def test_list_node_types_hides_agent_node_from_authoring_catalog():
+    tool = ListNodeTypesTool()
+
+    result = await tool.run(tool.input_schema(), HarnessContext())
+
+    node_types = {node.node_type for node in result.nodes}
+    assert "llm" in node_types
+    assert "agent" not in node_types
 
 
 def test_skill_loader_load():
@@ -740,6 +761,13 @@ def test_skill_loader_load():
     assert "LLM" in content
     # Second load should return cached content
     assert loader.load("simple_pipeline") == content
+
+
+def test_skill_loader_rejects_disabled_agent_node_skill():
+    loader = SkillLoader()
+
+    with pytest.raises(FileNotFoundError, match="disabled"):
+        loader.load("agent_node")
 
 
 def test_tool_registry_render_catalog_handles_no_input_tools():

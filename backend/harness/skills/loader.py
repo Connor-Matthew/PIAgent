@@ -59,6 +59,10 @@ class SkillLoader:
             raise FileNotFoundError(f"Skill not found: {name}")
 
         content = path.read_text(encoding="utf-8")
+        meta, _ = _parse_skill(content)
+        if meta.get("disabled") is True:
+            raise FileNotFoundError(f"Skill disabled: {name}")
+
         self._cache[name] = content
         return content
 
@@ -68,6 +72,8 @@ class SkillLoader:
             if path.name.startswith("_"):
                 continue
             meta, _ = _parse_skill(path.read_text(encoding="utf-8"))
+            if meta.get("disabled") is True:
+                continue
             name = meta.get("name", path.stem)
             skills.append(
                 SkillInfo(

@@ -22,6 +22,7 @@ from backend.harness.schemas import (
 
 _GRID_SIZE = 180
 _MARGIN = 100
+_RUNTIME_ONLY_NODE_TYPES = {"agent"}
 
 
 def _next_position(existing_nodes: list[dict]) -> dict[str, float]:
@@ -86,6 +87,13 @@ class GraphBuilder:
     # ── action implementations ──
 
     def _add_node(self, action: AddNodeAction) -> None:
+        if action.node_type in _RUNTIME_ONLY_NODE_TYPES:
+            raise BuilderError(
+                "Agent nodes are runtime-only and are not created by the harness authoring flow. "
+                "Build the workflow from ordinary nodes such as start, llm, rag, tts, if_else, "
+                "iteration, and end."
+            )
+
         node_id = action.node_id
         if not node_id:
             node_id = f"{action.node_type}_{uuid.uuid4().hex[:8]}"

@@ -47,4 +47,3 @@ nodes: []
   - `llm` 节点：`text`
   - `rag` 节点：`context`
   - `tts` 节点：`audio_url`
-  - `agent` 节点：`text`

@@ -3,6 +3,7 @@ name: agent_node
 description: 多步 Agent 节点（工具循环），让 LLM 自主决定调用哪些工具
 applies_when: 用户目标涉及 "agent"、"工具调用"、"自主决策"、"多步推理"
 nodes: [start, agent, end]
+disabled: true
 ---
 
 # Agent 节点 Skill
