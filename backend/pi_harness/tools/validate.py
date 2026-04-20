@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from backend.harness.validators import validate_graph
+from backend.pi_harness.validators import validate_graph
 from backend.pi_harness.state import WorkflowGraphDraft
 from backend.pi_harness.tools.compat import CompatStructuredTool
 
