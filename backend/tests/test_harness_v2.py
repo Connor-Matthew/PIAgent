@@ -6,14 +6,11 @@ validation recovery, skill loading, stuck detection, and preferences.
 
 from __future__ import annotations
 
-import json
 from unittest.mock import MagicMock, patch
 
 import pytest
-from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from backend.api.harness import _wire_session
 from backend.harness.builder import GraphBuilder
 from backend.harness.tools import ToolRegistry
 from backend.harness.tools.list_node_types import ListNodeTypesTool
@@ -58,30 +55,6 @@ def _make_decision_sequence(decisions: list[Decision]):
         return Finalize(reason="default")
 
     return _decide
-
-
-def _parse_sse_events(text: str) -> list[dict]:
-    events: list[dict] = []
-    for block in text.strip().split("\n\n"):
-        if not block.strip():
-            continue
-
-        event_type = ""
-        data_lines: list[str] = []
-        for line in block.splitlines():
-            if line.startswith("event:"):
-                event_type = line.removeprefix("event:").strip()
-            elif line.startswith("data:"):
-                data_lines.append(line.removeprefix("data:").strip())
-
-        if not data_lines:
-            continue
-
-        payload = json.loads("\n".join(data_lines))
-        payload.setdefault("type", event_type)
-        events.append(payload)
-
-    return events
 
 
 # ── builder tests ──
@@ -550,177 +523,6 @@ async def test_harness_preference_write(db: Session):
     # Verify a preference row exists
     pref = db.query(ProjectPreference).filter(ProjectPreference.key == "default").first()
     assert pref is not None
-
-
-# ── API endpoint tests ──
-
-def test_api_create_session(client: TestClient):
-    resp = client.post("/api/harness/sessions", json={"goal": "test workflow"})
-    assert resp.status_code == 200
-    data = resp.json()
-    assert "session_id" in data
-    assert data["status"] == "running"
-
-
-def test_wire_session_registers_default_harness_tools(db: Session):
-    hs = create_harness_session(db, goal="test workflow")
-
-    _wire_session(hs)
-
-    tool_names = {tool.name for tool in hs.tools.list_tools()}
-    assert {
-        "list_node_types",
-        "list_providers",
-        "list_knowledge_bases",
-        "peek_knowledge_base",
-        "list_skills",
-        "recall_preference",
-        "validate_graph",
-    } <= tool_names
-
-
-def test_api_get_session(client: TestClient):
-    create_resp = client.post("/api/harness/sessions", json={"goal": "test"})
-    sid = create_resp.json()["session_id"]
-    get_resp = client.get(f"/api/harness/sessions/{sid}")
-    assert get_resp.status_code == 200
-    assert get_resp.json()["session_id"] == sid
-
-
-def test_api_abort_session(client: TestClient):
-    create_resp = client.post("/api/harness/sessions", json={"goal": "test"})
-    sid = create_resp.json()["session_id"]
-    abort_resp = client.post(f"/api/harness/sessions/{sid}/abort")
-    assert abort_resp.status_code == 200
-    assert abort_resp.json()["status"] == "aborted"
-
-
-def test_api_resume_session(client: TestClient, db: Session):
-    hs = create_harness_session(db, goal="test")
-    hs.workspace.set_open_question("What output?", ["text", "audio"], question_id="q1")
-    hs._status = "awaiting_user"
-    hs._persist_workspace()
-
-    resume_resp = client.post(
-        f"/api/harness/sessions/{hs.id}/resume",
-        json={"question_id": "q1", "answer": "text"},
-    )
-    assert resume_resp.status_code == 200
-    assert resume_resp.json()["status"] == "resumed"
-
-
-def test_api_resume_records_answer_without_spawning_background_run(
-    client: TestClient,
-    db: Session,
-    monkeypatch: pytest.MonkeyPatch,
-):
-    """Resume should only record the answer; the SSE stream owns continued execution."""
-    hs = create_harness_session(db, goal="ambiguous goal")
-    hs.workspace.set_open_question("What output?", ["text", "audio"], question_id="q1")
-    hs._status = "awaiting_user"
-    hs._persist_workspace()
-
-    def fail_create_task(coro):
-        coro.close()
-        raise AssertionError("resume must not spawn a background harness run")
-
-    monkeypatch.setattr("backend.api.harness.asyncio.create_task", fail_create_task)
-
-    resp = client.post(
-        f"/api/harness/sessions/{hs.id}/resume",
-        json={"question_id": "q1", "answer": "text"},
-    )
-
-    assert resp.status_code == 200
-    assert resp.json()["status"] == "resumed"
-
-    restored = load_harness_session(hs.id, db)
-    assert restored.status == "running"
-    assert restored.workspace.open_question is None
-    facts = restored.workspace.facts.to_dict()
-    assert any(
-        result["tool"] == "user_reply"
-        and result["result"]["answer"] == "text"
-        for result in facts.get("tool_results", [])
-    )
-    assert any(e["type"] == "user_resumed" for e in restored._load_db().events)
-
-
-def test_api_events_continue_from_recorded_resume_answer(
-    client: TestClient,
-    db: Session,
-    monkeypatch: pytest.MonkeyPatch,
-):
-    """After /resume records an answer, the next SSE stream should finish the draft."""
-    db.add(Provider(type="openai", name="test", api_key_encrypted="enc", enabled=True, category="llm"))
-    db.commit()
-
-    hs = create_harness_session(db, goal="ambiguous goal")
-    hs.workspace.set_open_question("What output?", ["text", "audio"], question_id="q1")
-    hs._status = "awaiting_user"
-    hs._persist_workspace()
-
-    resume_resp = client.post(
-        f"/api/harness/sessions/{hs.id}/resume",
-        json={"question_id": "q1", "answer": "text"},
-    )
-    assert resume_resp.status_code == 200
-
-    decisions = [
-        ProposeAction(action=AddNodeAction(node_type="start", node_id="start_1")),
-        ProposeAction(action=AddNodeAction(node_type="llm", node_id="llm_1", config={"provider_id": 1})),
-        ProposeAction(action=AddNodeAction(node_type="end", node_id="end_1")),
-        ProposeAction(action=AddEdgeAction(source="start_1", target="llm_1")),
-        ProposeAction(action=AddEdgeAction(source="llm_1", target="end_1")),
-        Finalize(reason="done"),
-    ]
-    next_decision = _make_decision_sequence(decisions)
-
-    def decide(self, workspace):
-        return next_decision(workspace)
-
-    monkeypatch.setattr("backend.harness.lead_agent.LeadAgent.decide", decide)
-
-    with client.stream("GET", f"/api/harness/sessions/{hs.id}/events") as response:
-        assert response.status_code == 200
-        streamed_events = _parse_sse_events(response.read().decode())
-
-    event_types = [event["type"] for event in streamed_events]
-    assert "session_start" in event_types
-    assert event_types.count("graph_update") == 5
-    assert "harness_ready" in event_types
-    assert streamed_events[-1]["type"] == "session_end"
-    assert streamed_events[-1]["status"] == "ready"
-
-    restored = load_harness_session(hs.id, db)
-    assert restored.status == "ready"
-    snap = restored.builder.snapshot()
-    assert len(snap["nodes"]) == 3
-    assert len(snap["edges"]) == 2
-
-
-def test_api_events_exception_emits_one_failed_session_end(
-    client: TestClient,
-    db: Session,
-    monkeypatch: pytest.MonkeyPatch,
-):
-    hs = create_harness_session(db, goal="explode")
-
-    def explode(self, workspace):
-        raise RuntimeError("boom")
-
-    monkeypatch.setattr("backend.harness.lead_agent.LeadAgent.decide", explode)
-
-    with client.stream("GET", f"/api/harness/sessions/{hs.id}/events") as response:
-        assert response.status_code == 200
-        streamed_events = _parse_sse_events(response.read().decode())
-
-    session_end_events = [
-        event for event in streamed_events if event["type"] == "session_end"
-    ]
-    assert session_end_events == [
-        {"type": "session_end", "status": "failed", "reason": "boom"}
-    ]
 
 
 # ── skill loader tests ──

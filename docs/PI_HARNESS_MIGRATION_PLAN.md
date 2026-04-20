@@ -338,51 +338,51 @@ class DBModelResolver:
 ### M1 — Runtime Vendoring Spike（1.5–2.5 天）
 **目标**：证明 mini-harness 通用内核在被内嵌到 `backend/pi_harness/runtime/` 后，可以不依赖外部包安装、`config.yaml` 或全局 registry，被 PIAgent 直接驱动。
 
-- [ ] 把 mini-harness 的最小 runtime 核心复制到 `backend/pi_harness/runtime/`
-- [ ] 给 vendored `create_agent()` 增加 `model` / `model_factory` 注入点
-- [ ] 给 vendored `create_agent()` 增加 `tool_instances` 或等价注入点
-- [ ] 去掉 vendored runtime 对外部 `config.yaml` 的强依赖，改成显式参数或 PIAgent 默认配置
-- [ ] PIAgent 侧实现 `DBModelResolver`
-- [ ] 做一个最小 session-scoped spike tool（可用 dummy tool，最好直接用最小版 `add_node`）
-- [ ] 写 smoke test 或 dev script，证明 DB provider + session tool 可以一起工作
-- [ ] **验收**：PIAgent 侧 smoke test 能用 DB provider 驱动 `pi_harness/runtime` agent，并成功调用一个 session-scoped tool；过程中不依赖外部 `mini_harness` 包或其 `/runs/stream`
+- [x] 把 mini-harness 的最小 runtime 核心复制到 `backend/pi_harness/runtime/`
+- [x] 给 vendored `create_agent()` 增加 `model` / `model_factory` 注入点
+- [x] 给 vendored `create_agent()` 增加 `tool_instances` 或等价注入点
+- [x] 去掉 vendored runtime 对外部 `config.yaml` 的强依赖，改成显式参数或 PIAgent 默认配置
+- [x] PIAgent 侧实现 `DBModelResolver`
+- [x] 做一个最小 session-scoped spike tool（可用 dummy tool，最好直接用最小版 `add_node`）
+- [x] 写 smoke test 或 dev script，证明 DB provider + session tool 可以一起工作
+- [x] **验收**：PIAgent 侧 smoke test 能用 DB provider 驱动 `pi_harness/runtime` agent，并成功调用一个 session-scoped tool；过程中不依赖外部 `mini_harness` 包或其 `/runs/stream`
 
 ### M2 — 图构建工具与技能迁移（2–3 天）
 **目标**：agent 在 PIAgent 侧能够产出合法 WorkflowGraph v2 draft。
 
-- [ ] 实现 `WorkflowGraphDraft`
-- [ ] 实现 `add_node` / `connect_nodes` / `patch_node_config` / `remove_node` / `remove_edge`
-- [ ] 搬 `list_*` / `validate_graph` 工具
-- [ ] 把现有技能迁移到 `pi_harness/skills/*/SKILL.md`
-- [ ] 对 `agent_node.md` 做保留/合并决策
-- [ ] 用现有 `validators.py` 和 harness 测例做 parity 检查
-- [ ] **验收**：PIAgent 侧 runner 输入“做一个读 PDF 然后总结的工作流”，agent 产出的 draft 能通过 `validators.py` 校验
+- [x] 实现 `WorkflowGraphDraft`
+- [x] 实现 `add_node` / `connect_nodes` / `patch_node_config` / `remove_node` / `remove_edge`
+- [x] 搬 `list_*` / `validate_graph` 工具
+- [x] 把现有技能迁移到 `pi_harness/skills/*/SKILL.md`
+- [x] 对 `agent_node.md` 做保留/合并决策
+- [x] 用现有 `validators.py` 和 harness 测例做 parity 检查
+- [x] **验收**：PIAgent 侧 runner 输入“做一个读 PDF 然后总结的工作流”，agent 产出的 draft 能通过 `validators.py` 校验
 
 ### M3 — Session/SSE 契约 + 前端联调（2–2.5 天）
 **目标**：前端画布和会话体验与当前版本等价。
 
-- [ ] 实现 `sse_bridge`，把 tool/LangGraph 事件映射到现有 harness event schema
-- [ ] 新路由 `/api/pi_harness/sessions`、`/events`、`/resume`、`/apply`、`/abort`（与旧路由并存）
-- [ ] clarification -> `awaiting_user_input` -> `resume` 全链路打通
-- [ ] 前端加 feature flag 切换 v1/v2 后端
-- [ ] **验收**：新 UI 流程跑通 `create -> graph_update 渐进渲染 -> ask clarification -> resume -> ready -> apply`，体验不差于旧版
+- [x] 实现 `sse_bridge`，把 tool/LangGraph 事件映射到现有 harness event schema
+- [x] 新路由 `/api/pi_harness/sessions`、`/events`、`/resume`、`/apply`、`/abort`（与旧路由并存）
+- [x] clarification -> `awaiting_user_input` -> `resume` 全链路打通
+- [x] 前端加 feature flag 切换 v1/v2 后端
+- [x] **验收**：新 UI 流程跑通 `create -> graph_update 渐进渲染 -> ask clarification -> resume -> ready -> apply`，体验不差于旧版
 
 ### M4 — 持久化与刷新恢复（1–1.5 天）
 **目标**：刷新、回看、续聊与当前行为一致。
 
-- [ ] `session_store.py`：LangGraph state + draft snapshot <-> `AgentSession.workspace_json`
-- [ ] 事件回放/展示继续复用 `events_json`
-- [ ] 关标签重开后的恢复路径打通
-- [ ] 补回归测试，覆盖 open question、ready 状态、applied 状态恢复
-- [ ] **验收**：关标签后重开，会话历史、当前 draft、open question、ready/applied 状态都能完整恢复
+- [x] `session_store.py`：LangGraph state + draft snapshot <-> `AgentSession.workspace_json`
+- [x] 事件回放/展示继续复用 `events_json`
+- [x] 关标签重开后的恢复路径打通
+- [x] 补回归测试，覆盖 open question、ready 状态、applied 状态恢复
+- [x] **验收**：关标签后重开，会话历史、当前 draft、open question、ready/applied 状态都能完整恢复
 
 ### M5 — 切换与清理（0.5–1 天）
 **目标**：切流到新实现并删除旧壳代码。
 
-- [ ] `/api/harness` 路由切到 `pi_harness`
-- [ ] 前端 feature flag 去掉
+- [x] `/api/harness` 路由切到 `pi_harness`
+- [x] 前端 feature flag 去掉
 - [ ] 删除 `backend/harness/`
-- [ ] 跑 parity 测试和 E2E 冒烟
+- [x] 跑 parity 测试和 E2E 冒烟
 - [ ] 更新 `CLAUDE.md` / 相关文档里的 harness 段落
 
 **总预估**：7–10.5 人日。

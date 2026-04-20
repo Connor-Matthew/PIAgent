@@ -3,12 +3,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from langchain_core.tools import StructuredTool
-
 from backend.models.knowledge_base import KnowledgeBase
 from backend.models.project_preference import ProjectPreference
 from backend.models.provider import Provider
 from backend.pi_harness.runtime.skills.loader import load_skills
+from backend.pi_harness.tools.compat import CompatStructuredTool
 
 _SKILLS_PATH = Path(__file__).resolve().parent.parent / "skills"
 
@@ -128,7 +127,7 @@ def _get_or_create_preferences(db) -> ProjectPreference:
     return row
 
 
-def build_context_tools(db) -> list[StructuredTool]:
+def build_context_tools(db) -> list[CompatStructuredTool]:
     def list_node_types() -> str:
         nodes = [
             {
@@ -139,6 +138,9 @@ def build_context_tools(db) -> list[StructuredTool]:
             for node_type in sorted(_NODE_CONFIG_SCHEMAS.keys())
         ]
         return json.dumps({"nodes": nodes}, ensure_ascii=False)
+
+    async def list_node_types_async() -> str:
+        return list_node_types()
 
     def list_skills() -> str:
         skills = load_skills(_SKILLS_PATH)
@@ -151,6 +153,9 @@ def build_context_tools(db) -> list[StructuredTool]:
             for skill in skills
         ]
         return json.dumps({"skills": payload}, ensure_ascii=False)
+
+    async def list_skills_async() -> str:
+        return list_skills()
 
     def list_providers(category: str | None = None) -> str:
         query = db.query(Provider)
@@ -175,6 +180,9 @@ def build_context_tools(db) -> list[StructuredTool]:
             )
         return json.dumps({"providers": providers}, ensure_ascii=False)
 
+    async def list_providers_async(category: str | None = None) -> str:
+        return list_providers(category=category)
+
     def list_knowledge_bases() -> str:
         rows = db.query(KnowledgeBase).all()
         payload = [
@@ -187,6 +195,9 @@ def build_context_tools(db) -> list[StructuredTool]:
             for row in rows
         ]
         return json.dumps({"knowledge_bases": payload}, ensure_ascii=False)
+
+    async def list_knowledge_bases_async() -> str:
+        return list_knowledge_bases()
 
     def recall_preference(key: str | None = None) -> str:
         row = _get_or_create_preferences(db)
@@ -201,29 +212,37 @@ def build_context_tools(db) -> list[StructuredTool]:
             snapshot = {key: snapshot.get(key)}
         return json.dumps({"preferences": snapshot}, ensure_ascii=False)
 
+    async def recall_preference_async(key: str | None = None) -> str:
+        return recall_preference(key=key)
+
     return [
-        StructuredTool.from_function(
+        CompatStructuredTool.from_function(
             list_node_types,
+            coroutine=list_node_types_async,
             name="list_node_types",
             description="List supported workflow node types and their configuration schemas.",
         ),
-        StructuredTool.from_function(
+        CompatStructuredTool.from_function(
             list_skills,
+            coroutine=list_skills_async,
             name="list_skills",
             description="List available pi_harness workflow-building skills.",
         ),
-        StructuredTool.from_function(
+        CompatStructuredTool.from_function(
             list_providers,
+            coroutine=list_providers_async,
             name="list_providers",
             description="List configured providers from the database, optionally filtered by category.",
         ),
-        StructuredTool.from_function(
+        CompatStructuredTool.from_function(
             list_knowledge_bases,
+            coroutine=list_knowledge_bases_async,
             name="list_knowledge_bases",
             description="List available knowledge bases and their document counts.",
         ),
-        StructuredTool.from_function(
+        CompatStructuredTool.from_function(
             recall_preference,
+            coroutine=recall_preference_async,
             name="recall_preference",
             description="Recall stored project preferences.",
         ),

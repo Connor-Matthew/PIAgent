@@ -3,10 +3,9 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 
-from langchain_core.tools import StructuredTool
-
 from backend.harness.validators import validate_graph
 from backend.pi_harness.state import WorkflowGraphDraft
+from backend.pi_harness.tools.compat import CompatStructuredTool
 
 
 def build_finalize_draft_tool(
@@ -14,7 +13,7 @@ def build_finalize_draft_tool(
     *,
     db=None,
     on_ready: Callable[[dict], None] | None = None,
-) -> StructuredTool:
+) -> CompatStructuredTool:
     def finalize_draft() -> str:
         graph = draft.snapshot()
         findings = validate_graph(graph, db=db)
@@ -32,8 +31,12 @@ def build_finalize_draft_tool(
             ensure_ascii=False,
         )
 
-    return StructuredTool.from_function(
+    async def finalize_draft_async() -> str:
+        return finalize_draft()
+
+    return CompatStructuredTool.from_function(
         finalize_draft,
+        coroutine=finalize_draft_async,
         name="finalize_draft",
         description="Validate the current workflow draft and mark it ready if there are no errors.",
     )
