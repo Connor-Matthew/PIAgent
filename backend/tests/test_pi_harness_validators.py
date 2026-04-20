@@ -10,7 +10,7 @@ def test_validate_graph_returns_pi_harness_findings():
     assert {item.code for item in findings} >= {"missing_start", "missing_end"}
 
 
-def test_validate_graph_matches_legacy_output_for_simple_linear_graph():
+def test_validate_graph_passes_for_simple_linear_graph():
     graph = {
         "version": 2,
         "nodes": [
@@ -24,8 +24,5 @@ def test_validate_graph_matches_legacy_output_for_simple_linear_graph():
         ],
     }
 
-    new_findings = [item.model_dump(mode="json") for item in validate_graph(graph)]
-    from backend.harness.validators import validate_graph as legacy_validate_graph
-    old_findings = [item.model_dump(mode="json") for item in legacy_validate_graph(graph)]
-
-    assert new_findings == old_findings
+    findings = validate_graph(graph)
+    assert not any(f.severity == "error" for f in findings)

@@ -381,9 +381,9 @@ class DBModelResolver:
 
 - [x] `/api/harness` 路由切到 `pi_harness`
 - [x] 前端 feature flag 去掉
-- [ ] 删除 `backend/harness/`
+- [x] 删除 `backend/harness/`
 - [x] 跑 parity 测试和 E2E 冒烟
-- [ ] 更新 `CLAUDE.md` / 相关文档里的 harness 段落
+- [x] 更新 `CLAUDE.md` / 相关文档里的 harness 段落
 
 **总预估**：7–10.5 人日。
 
