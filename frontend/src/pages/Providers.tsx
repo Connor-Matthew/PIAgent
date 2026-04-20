@@ -41,7 +41,8 @@ export default function ProvidersPage() {
     try {
       const data = await providerApi.list()
       setProviders(data)
-    } catch {
+    } catch (error: unknown) {
+      console.error('fetchProviders error', error)
       setProviders([])
     } finally {
       setLoading(false)
@@ -130,10 +131,18 @@ export default function ProvidersPage() {
 
   const validate = () => {
     if (!form.type) return '请选择类型'
-    if (!form.name.trim()) return '名称不能为空'
+    const trimmedName = form.name.trim()
+    if (!trimmedName) return '名称不能为空'
+    if (trimmedName.length > 64) return '名称不能超过 64 个字符'
     if (editingId === null && !form.api_key.trim()) return 'API Key 不能为空'
     if (selectedType?.requires_base_url && !form.base_url.trim()) {
       return `类型 ${selectedType.type} 需要填写 Base URL`
+    }
+    if (selectedType?.requires_base_url && form.base_url.trim()) {
+      const url = form.base_url.trim()
+      if (!/^https?:\/\//i.test(url)) {
+        return 'Base URL 必须以 http:// 或 https:// 开头'
+      }
     }
     return null
   }

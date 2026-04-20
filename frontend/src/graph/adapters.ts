@@ -91,8 +91,11 @@ export function reactFlowToGraph(
   edges: Edge[]
 ): WorkflowGraphV2 {
   const graphNodes: WorkflowNodeV2[] = nodes.map((n) => {
-    // Strip UI-only transient fields so they do not leak into persisted config
-    const { visualState, visualLabel, statusNote, ...cleanConfig } = n.data.config
+    const cleanConfig = Object.fromEntries(
+      Object.entries(n.data.config).filter(
+        ([key]) => !['visualState', 'visualLabel', 'statusNote'].includes(key)
+      )
+    )
     return {
       id: n.id,
       type: n.data.nodeType,

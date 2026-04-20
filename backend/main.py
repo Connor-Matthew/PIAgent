@@ -102,6 +102,7 @@ def _seed_providers(db: Session):
         provider = Provider(
             type=ptype,
             name=name,
+            category="llm",
             api_key_encrypted=encrypt(key),
             enabled=True,
         )

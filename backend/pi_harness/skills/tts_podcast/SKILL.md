@@ -21,6 +21,14 @@ nodes: [start, llm, tts, end]
 - `tts.voice_id` 如果用户有偏好，优先使用 `project_preferences.preferred_tts_voice_id`
 - `tts.max_chars` 默认 500，长文本会自动分段并行合成
 
+## 工具调用示例
+```json
+{"node_type": "start", "config": {"inputs": [{"name": "topic", "type": "string", "required": true}]}}
+{"node_type": "llm", "config": {"provider_id": 1, "model": "gpt-4o", "system_prompt": "You are a podcast script writer.", "temperature": 0.8}}
+{"node_type": "tts", "config": {"provider_id": 1, "voice_id": "default", "max_chars": 500}}
+{"node_type": "end", "config": {"outputs": [{"name": "audio_url", "source": "reference", "value": "{{tts.audio_url}}"}]}}
+```
+
 ## 常见坑
 - TTS 的输入是 `state["llm_output"]`，所以 LLM 节点必须在 TTS 之前
 - 如果 LLM 输出为空，TTS 会报错

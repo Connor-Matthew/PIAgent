@@ -23,4 +23,4 @@ def decrypt(ciphertext: str) -> str:
 def mask_key(plaintext: str) -> str:
     if len(plaintext) <= 4:
         return "***"
-    return "sk-***" + plaintext[-4:]
+    return "***" + plaintext[-4:]

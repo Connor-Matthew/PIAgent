@@ -38,6 +38,12 @@ nodes: []
 ]
 ```
 
+## 工具调用示例
+```json
+{"node_type": "start", "config": {"inputs": [{"name": "question", "type": "string", "required": true}]}}
+{"node_type": "end", "config": {"outputs": [{"name": "answer", "source": "reference", "value": "{{llm.text}}"}]}}
+```
+
 ## 模板引用规则
 - 格式必须是 `{{nodeId.fieldName}}`（双大括号），严格匹配
 - `nodeId` 是上游节点的 `id`

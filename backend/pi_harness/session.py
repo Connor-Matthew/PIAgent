@@ -32,7 +32,12 @@ _SKILLS_PATH = Path(__file__).resolve().parent / "skills"
 _SYSTEM_PROMPT = (
     "You are PIAgent's workflow-building harness. "
     "Use the available tools to inspect capabilities, incrementally build a valid workflow graph, "
-    "ask for clarification instead of guessing when required, and call finalize_draft when the graph is valid."
+    "ask for clarification instead of guessing when required, and call finalize_draft when the graph is valid.\n\n"
+    "CRITICAL RULES:\n"
+    "1. When calling add_node, ALWAYS pass a complete `config` dict with all required fields. "
+    "Call list_node_types first to see the exact config schema for each node type.\n"
+    "2. Do NOT add nodes with empty configs — the workflow will be invalid.\n"
+    "3. After adding all nodes, connect them with connect_nodes, then call finalize_draft."
 )
 
 

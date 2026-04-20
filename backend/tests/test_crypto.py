@@ -10,7 +10,7 @@ def test_encrypt_decrypt_roundtrip():
 
 
 def test_mask_key():
-    assert mask_key("sk-abcdefghijklmnopqrstuvwxyz") == "sk-***wxyz"
-    assert mask_key("my-plaintext-key") == "sk-***-key"
+    assert mask_key("sk-abcdefghijklmnopqrstuvwxyz") == "***wxyz"
+    assert mask_key("my-plaintext-key") == "***-key"
     assert mask_key("abc") == "***"
     assert mask_key("abcd") == "***"

@@ -3,6 +3,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from backend.core.crypto import encrypt, decrypt, mask_key
@@ -18,18 +19,18 @@ router = APIRouter(prefix="/api/providers", tags=["providers"])
 
 
 class ProviderCreate(BaseModel):
-    type: str
+    type: str = Field(min_length=1)
     name: str = Field(min_length=1, max_length=64)
-    base_url: str | None = None
-    api_key: str
+    base_url: str | None = Field(default=None, max_length=256)
+    api_key: str = Field(min_length=1)
     enabled: bool = True
     category: str = "llm"
 
 
 class ProviderUpdate(BaseModel):
-    type: str | None = None
+    type: str | None = Field(default=None, min_length=1)
     name: str | None = Field(default=None, min_length=1, max_length=64)
-    base_url: str | None = None
+    base_url: str | None = Field(default=None, max_length=256)
     api_key: str | None = None
     enabled: bool | None = None
     selected_models: list[str] | None = None
@@ -37,7 +38,10 @@ class ProviderUpdate(BaseModel):
 
 
 def _provider_to_dict(provider: Provider, mask: bool = True) -> dict:
-    api_key = decrypt(provider.api_key_encrypted)
+    try:
+        api_key = decrypt(provider.api_key_encrypted)
+    except Exception:
+        api_key = "[decrypt_failed]"
     return {
         "id": provider.id,
         "type": provider.type,
@@ -121,9 +125,12 @@ def create_provider(body: ProviderCreate, db: Session = Depends(get_db)):
     try:
         db.commit()
         db.refresh(provider)
-    except Exception as e:
+    except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=409, detail=f"Provider name already exists: {body.name}") from e
+        raise HTTPException(status_code=409, detail=f"Provider name already exists: {body.name}")
+    except Exception:
+        db.rollback()
+        raise
     return _provider_to_dict(provider)
 
 
@@ -149,6 +156,11 @@ def update_provider(provider_id: int, body: ProviderUpdate, db: Session = Depend
             raise HTTPException(status_code=400, detail=f"Unknown TTS provider type: {body.type}")
         provider.type = body.type
     if body.category is not None:
+        effective_type = body.type or provider.type
+        if body.category == "llm" and effective_type not in PROVIDER_REGISTRY:
+            raise HTTPException(status_code=400, detail=f"Unknown provider type: {effective_type}")
+        if body.category == "tts" and effective_type not in TTS_PROVIDER_REGISTRY:
+            raise HTTPException(status_code=400, detail=f"Unknown TTS provider type: {effective_type}")
         provider.category = body.category
     if body.name is not None:
         provider.name = body.name
@@ -169,9 +181,12 @@ def update_provider(provider_id: int, body: ProviderUpdate, db: Session = Depend
     try:
         db.commit()
         db.refresh(provider)
-    except Exception as e:
+    except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=409, detail=f"Provider name already exists: {body.name}") from e
+        raise HTTPException(status_code=409, detail=f"Provider name already exists: {body.name or provider.name}")
+    except Exception:
+        db.rollback()
+        raise
 
     return _provider_to_dict(provider)
 
@@ -182,12 +197,18 @@ def delete_provider(provider_id: int, db: Session = Depends(get_db)):
     if not provider:
         raise HTTPException(status_code=404, detail="Provider not found")
 
-    refs = _find_provider_references(db, provider_id)
-    if refs:
-        raise HTTPException(status_code=409, detail={"message": "Provider is referenced by workflows", "references": refs})
+    try:
+        refs = _find_provider_references(db, provider_id)
+        if refs:
+            raise HTTPException(status_code=409, detail={"message": "Provider is referenced by workflows", "references": refs})
 
-    db.delete(provider)
-    db.commit()
+        db.delete(provider)
+        db.commit()
+    except HTTPException:
+        raise
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to delete provider")
     return None
 
 
@@ -224,7 +245,7 @@ def get_models(provider_id: int, refresh: bool = Query(False), db: Session = Dep
         if provider.type == "minimax_tts":
             models = ["speech-2.8-hd", "speech-2.5-hd"]
             return {"provider_id": provider_id, "models": models, "cached_at": None, "selected_models": provider.selected_models or []}
-        return {"provider_id": provider_id, "models": [], "cached_at": None, "selected_models": []}
+        return {"provider_id": provider_id, "models": [], "cached_at": None, "selected_models": provider.selected_models or []}
 
     extra = dict(provider.extra_config or {})
     cached_models = extra.get("cached_models")
@@ -247,7 +268,10 @@ def get_models(provider_id: int, refresh: bool = Query(False), db: Session = Dep
     extra["cached_models"] = models
     extra["cached_at"] = now
     provider.extra_config = extra
-    db.commit()
-    db.refresh(provider)
+    try:
+        db.commit()
+        db.refresh(provider)
+    except Exception:
+        db.rollback()
 
     return {"provider_id": provider_id, "models": models, "cached_at": now, "selected_models": provider.selected_models or []}

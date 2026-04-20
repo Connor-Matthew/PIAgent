@@ -11,7 +11,7 @@ def test_create_provider(client):
     data = resp.json()
     assert data["type"] == "openai"
     assert data["name"] == "Test OpenAI"
-    assert data["api_key"] == "sk-***3456"  # masked
+    assert data["api_key"] == "***3456"  # masked
     assert "id" in data
 
 

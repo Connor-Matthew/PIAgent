@@ -158,7 +158,12 @@ def build_graph_op_tools(
             add_node,
             coroutine=add_node_async,
             name="add_node",
-            description="Add a node to the workflow draft graph.",
+            description=(
+                "Add a node to the workflow draft graph. "
+                "You MUST provide a complete `config` dict with all required fields for the node type. "
+                "Call `list_node_types` first to see the exact config schema for each node type. "
+                "Example: add_node(node_type='llm', config={'provider_id': 1, 'system_prompt': 'You are a helpful assistant', 'model': 'gpt-4o', 'temperature': 0.7})"
+            ),
             args_schema=AddNodeArgs,
         ),
         CompatStructuredTool.from_function(

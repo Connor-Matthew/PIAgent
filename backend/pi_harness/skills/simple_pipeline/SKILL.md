@@ -20,6 +20,13 @@ nodes: [start, llm, end]
 - LLM 的 `system_prompt` 把用户目标翻译进去
 - End 的 `outputs` 映射 `{result: {{llm.text}}}`
 
+## 工具调用示例
+```json
+{"node_type": "start", "config": {"inputs": [{"name": "input", "type": "string", "required": true}]}}
+{"node_type": "llm", "config": {"provider_id": 1, "model": "gpt-4o", "system_prompt": "You are a helpful assistant."}}
+{"node_type": "end", "config": {"outputs": [{"name": "result", "source": "reference", "value": "{{llm.text}}"}]}}
+```
+
 ## 常见坑
 - 不要做成 Start → End 直连，否则 validator 会报 `too_simple` warning
 

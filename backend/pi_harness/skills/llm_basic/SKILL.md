@@ -20,6 +20,13 @@ nodes: [start, llm, end]
 - `temperature` 默认 0.7；创意任务可提高到 0.9
 - `system_prompt` 尽量具体，把用户目标翻译成明确的角色设定
 
+## 工具调用示例
+```json
+{"node_type": "start", "config": {"inputs": [{"name": "question", "type": "string", "required": true}]}}
+{"node_type": "llm", "config": {"provider_id": 1, "model": "gpt-4o", "system_prompt": "You are a helpful assistant."}}
+{"node_type": "end", "config": {"outputs": [{"name": "answer", "source": "reference", "value": "{{llm.text}}"}]}}
+```
+
 ## 常见坑
 - 不要漏 End 节点，否则图不合法
 - Start 到 LLM 的 edge 必须存在，否则 LLM 收不到输入

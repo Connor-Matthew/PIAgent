@@ -91,7 +91,9 @@ function isNodeType(value: unknown): value is NodeType {
     value === 'rag' ||
     value === 'agent' ||
     value === 'tts' ||
-    value === 'end'
+    value === 'end' ||
+    value === 'if_else' ||
+    value === 'iteration'
   )
 }
 
@@ -119,28 +121,31 @@ function getNodeConfig(rawData: Record<string, unknown>) {
   )
 }
 
-function normalizeGraphNode(input: WorkflowNodeInput) {
-  // Detect v2 graph node (no .data property) vs React Flow node
-  const isV2Node = !('data' in input)
-  const rawData = isRecord((input as any).data) ? (input as any).data : {}
+function isReactFlowNode(input: WorkflowNodeInput): input is Node<WorkflowNodeData> {
+  return 'data' in input
+}
 
-  const nodeType = getNodeType(isV2Node ? input.type : rawData.nodeType ?? input.type)
-  const label = isV2Node
-    ? (input as any).label ?? nodeType
+function normalizeGraphNode(input: WorkflowNodeInput) {
+  const isFlowNode = isReactFlowNode(input)
+  const rawData: Record<string, unknown> = isFlowNode ? { ...input.data } : {}
+
+  const nodeType = getNodeType(isFlowNode ? rawData.nodeType ?? input.type : input.type)
+  const label = !isFlowNode
+    ? input.label ?? nodeType
     : typeof rawData.label === 'string'
       ? rawData.label
       : nodeType
-  const locked = isV2Node
-    ? (input as any).locked
+  const locked = !isFlowNode
+    ? input.locked
     : isStartOrEnd(nodeType) || (typeof rawData.locked === 'boolean' ? rawData.locked : undefined)
-  const config = isV2Node
-    ? (isRecord((input as any).config) ? (input as any).config : {})
+  const config = !isFlowNode
+    ? (isRecord(input.config) ? input.config : {})
     : getNodeConfig(rawData)
 
   // Map backend parentId <=> React Flow parentNode + extent
   const parentNode =
-    (input as any).parentNode ||
-    (typeof (input as any).parentId === 'string' ? (input as any).parentId : undefined) ||
+    (isFlowNode ? input.parentNode : undefined) ||
+    (!isFlowNode && typeof input.parentId === 'string' ? input.parentId : undefined) ||
     (typeof rawData.parentId === 'string' ? rawData.parentId : undefined)
   const extent = parentNode ? ('parent' as const) : undefined
 
@@ -155,12 +160,17 @@ function normalizeGraphNode(input: WorkflowNodeInput) {
       nodeType,
       locked,
       config,
-      ...(isV2Node ? {} : pickUiData(rawData)),
+      ...(isFlowNode ? pickUiData(rawData) : {}),
     },
   } satisfies Node<WorkflowNodeData>
 }
 
 function normalizeGraphEdge(input: WorkflowEdgeInput) {
+  const sourceHandle =
+    'sourceHandle' in input && typeof input.sourceHandle === 'string'
+      ? input.sourceHandle
+      : undefined
+
   return {
     id: input.id || `${input.source}-${input.target}`,
     source: input.source,
@@ -169,7 +179,7 @@ function normalizeGraphEdge(input: WorkflowEdgeInput) {
     animated: input.animated,
     label: input.label,
     markerEnd: input.markerEnd,
-    sourceHandle: (input as any).sourceHandle,
+    sourceHandle,
   } satisfies Edge
 }
 

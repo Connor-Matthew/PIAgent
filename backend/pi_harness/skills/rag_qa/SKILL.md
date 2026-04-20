@@ -24,6 +24,14 @@ requires: [knowledge_base]
 - `rag.top_k` 默认 3，文档很长时可提高到 5
 - LLM 的 prompt 模板中，`{rag.context}` 是检索到的文档拼接文本
 
+## 工具调用示例
+```json
+{"node_type": "start", "config": {"inputs": [{"name": "question", "type": "string", "required": true}]}}
+{"node_type": "rag", "config": {"knowledge_base_id": "default", "top_k": 3}}
+{"node_type": "llm", "config": {"provider_id": 1, "model": "gpt-4o", "system_prompt": "Based on the provided context, answer the user's question."}}
+{"node_type": "end", "config": {"outputs": [{"name": "answer", "source": "reference", "value": "{{llm.text}}"}]}}
+```
+
 ## 常见坑
 - `rag.context` 可能很长，prompt 中直接拼会变长；如果超长，考虑在 LLM 前加一个 summarize 步骤（但 v1 暂不支持自动 summarize，需要用户手动调 top_k）
 - 如果 KB 为空，RAG 会返回空字符串，LLM 会基于自身知识回答，这可能不是用户想要的
