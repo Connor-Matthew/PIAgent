@@ -13,6 +13,9 @@ export const harnessApi = {
   resumeSession: (id: string, questionId: string, answer: string) =>
     api.post<{ status: string; session_id: string }>(`/harness/sessions/${id}/resume`, { question_id: questionId, answer }).then(r => r.data),
 
+  continueSession: (id: string, message: string) =>
+    api.post<{ status: string; session_id: string }>(`/harness/sessions/${id}/messages`, { message }).then(r => r.data),
+
   applySession: (id: string) =>
     api.post<{ workflow_id: string; graph: Record<string, unknown> }>(`/harness/sessions/${id}/apply`).then(r => r.data),
 

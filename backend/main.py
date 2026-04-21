@@ -31,6 +31,7 @@ def _ensure_agent_session_schema(db_engine: Engine):
         "workspace_json": "TEXT NOT NULL DEFAULT '{}'",
         "answered_dims_json": "TEXT NOT NULL DEFAULT '{}'",
         "events_json": "TEXT NOT NULL DEFAULT '[]'",
+        "messages_json": "TEXT NOT NULL DEFAULT '[]'",
     }
 
     for column_name, column_def in missing_columns.items():

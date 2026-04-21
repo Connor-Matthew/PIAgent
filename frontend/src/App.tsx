@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom'
 import { ReactFlowProvider } from 'reactflow'
-import { AgentPanel } from './components/agent/AgentPanel'
 import { NodeLibrary } from './components/panels/NodeLibrary'
 import { WorkflowCanvas } from './components/canvas/WorkflowCanvas'
 import { RightPanel } from './components/panels/RightPanel'
@@ -62,10 +61,7 @@ function WorkflowEditor() {
       {/* Main content: 3-column layout */}
       <div className="flex flex-1 overflow-hidden">
         <NodeLibrary />
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <AgentPanel />
-          <WorkflowCanvas />
-        </div>
+        <WorkflowCanvas />
         <RightPanel />
       </div>
     </>

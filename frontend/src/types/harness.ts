@@ -1,6 +1,6 @@
 import type { WorkflowGraph } from './workflow'
 
-export type HarnessStatus = 'idle' | 'running' | 'awaiting_user' | 'ready' | 'failed' | 'applied'
+export type HarnessStatus = 'idle' | 'running' | 'awaiting_user' | 'waiting' | 'ready' | 'failed' | 'applied'
 
 export interface HarnessOpenQuestion {
   question_id: string
@@ -19,6 +19,8 @@ export interface HarnessSession {
 export type HarnessEventType =
   | 'session_start'
   | 'decision'
+  | 'agent_message'
+  | 'agent_message_delta'
   | 'tool_call'
   | 'tool_result'
   | 'skill_loaded'
@@ -35,6 +37,8 @@ export type HarnessEventType =
 export const HARNESS_EVENT_TYPES: HarnessEventType[] = [
   'session_start',
   'decision',
+  'agent_message',
+  'agent_message_delta',
   'tool_call',
   'tool_result',
   'skill_loaded',
@@ -77,6 +81,7 @@ export interface HarnessEvent {
   snippet?: string
   snapshot?: WorkflowGraph
   message?: string
+  content?: string
   findings?: Array<{
     severity: 'error' | 'warning'
     code: string

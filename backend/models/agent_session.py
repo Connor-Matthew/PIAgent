@@ -15,6 +15,7 @@ class AgentSession(Base):
     status = Column(String(32), nullable=False, default="running")
     workspace_json = Column(Text, nullable=True)
     events_json = Column(Text, nullable=False, default="[]")
+    messages_json = Column(Text, nullable=False, default="[]")
     workflow_id = Column(String, ForeignKey("workflows.id"), nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(

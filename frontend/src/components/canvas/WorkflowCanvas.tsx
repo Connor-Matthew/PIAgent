@@ -8,6 +8,10 @@ import { nodeTypes } from '../nodes'
 import { useDnD } from '../../hooks/useDnD'
 import { CanvasToolbar } from './CanvasToolbar'
 
+const DEFAULT_EDGE_OPTIONS = {
+  markerEnd: { type: MarkerType.ArrowClosed, color: '#64748b' },
+}
+
 function describeOverlayEvent(type: string) {
   switch (type) {
     case 'session_start':
@@ -212,9 +216,7 @@ export function WorkflowCanvas() {
         onPaneClick={() => setSelectedNode(null)}
         onEdgeDoubleClick={(_, edge) => deleteEdge(edge.id)}
         nodeTypes={nodeTypes}
-        defaultEdgeOptions={{
-          markerEnd: { type: MarkerType.ArrowClosed, color: '#64748b' },
-        }}
+        defaultEdgeOptions={DEFAULT_EDGE_OPTIONS}
         fitView
         className="bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.08),_transparent_28%),radial-gradient(circle_at_bottom_right,_rgba(56,189,248,0.06),_transparent_30%),#0a0f1a]"
       >

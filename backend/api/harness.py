@@ -1,6 +1,7 @@
 """PIAgent Harness v2 — API endpoints for /api/harness/*.
 
 Replaces the old /api/agent/* and legacy harness endpoints.
+Now powered by ReActBuilderAgentRunner (LangGraph create_react_agent).
 """
 
 from __future__ import annotations
@@ -15,22 +16,16 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from backend.database import get_db
-from backend.harness.session import (
-    HarnessSession,
-    create_harness_session,
-    load_harness_session,
+from backend.harness.react_session import (
+    create_react_harness_session,
+    load_react_harness_session,
 )
-from backend.harness.tools import (
-    HarnessContext,
-    ListKnowledgeBasesTool,
-    ListNodeTypesTool,
-    ListProvidersTool,
-    ListSkillsTool,
-    PeekKnowledgeBaseTool,
-    RecallPreferenceTool,
-    ToolRegistry,
-    ValidateGraphTool,
-)
+
+# Backwards compatibility: old tests import _wire_session from this module.
+# ReAct sessions do not need wiring, but we keep a no-op stub for test imports.
+def _wire_session(hs):
+    """No-op for backwards compatibility. ReAct sessions self-initialize."""
+    pass
 
 router = APIRouter(prefix="/api/harness", tags=["harness"])
 
@@ -52,26 +47,13 @@ class ResumeRequest(BaseModel):
     answer: str
 
 
+class ContinueRequest(BaseModel):
+    message: str = Field(min_length=1)
+
+
 class ApplyResponse(BaseModel):
     workflow_id: str
     graph: dict
-
-
-# ── helper: build a fully-wired HarnessSession ──
-
-def _wire_session(hs: HarnessSession) -> HarnessSession:
-    """Register default tools and init the lead agent."""
-    hs.setup_tools(
-        ListNodeTypesTool(),
-        ListProvidersTool(),
-        ListKnowledgeBasesTool(),
-        PeekKnowledgeBaseTool(),
-        ListSkillsTool(),
-        RecallPreferenceTool(),
-        ValidateGraphTool(),
-    )
-    hs.init_lead_agent()
-    return hs
 
 
 # ── endpoints ──
@@ -81,14 +63,13 @@ async def create_session(
     body: CreateSessionRequest,
     db: Session = Depends(get_db),
 ):
-    hs = create_harness_session(db, goal=body.goal, workflow_id=body.workflow_id)
-    _wire_session(hs)
+    hs = create_react_harness_session(db, goal=body.goal, workflow_id=body.workflow_id)
     return CreateSessionResponse(session_id=hs.id, status=hs.status)
 
 
 @router.get("/sessions/{session_id}")
 async def get_session(session_id: str, db: Session = Depends(get_db)):
-    hs = load_harness_session(session_id, db)
+    hs = load_react_harness_session(session_id, db)
     return {
         "session_id": hs.id,
         "status": hs.status,
@@ -104,8 +85,7 @@ async def stream_events(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    hs = load_harness_session(session_id, db)
-    _wire_session(hs)
+    hs = load_react_harness_session(session_id, db)
 
     async def event_generator():
         queue: asyncio.Queue[dict | None] = asyncio.Queue()
@@ -121,8 +101,19 @@ async def stream_events(
         async def produce() -> None:
             try:
                 if hs.status == "awaiting_user":
-                    # Already paused; don't re-run, just wait (frontend will call resume)
-                    await emit({"type": "awaiting_user_input", **hs.workspace.open_question})
+                    # Already paused for a real ask_user question; don't re-run.
+                    if hs.workspace.open_question:
+                        open_question = hs.workspace.open_question
+                        await emit({
+                            "type": "awaiting_user_input",
+                            "question_id": open_question.get("question_id"),
+                            "prompt": open_question.get("question"),
+                            "options": open_question.get("options"),
+                        })
+                    else:
+                        await emit({"type": "session_end", "status": "awaiting_user"})
+                elif hs.status == "waiting":
+                    await emit({"type": "session_end", "status": "waiting"})
                 elif hs.status == "running":
                     await hs.run(on_event=emit)
                 elif hs.status == "ready":
@@ -180,11 +171,10 @@ async def resume_session(
     body: ResumeRequest,
     db: Session = Depends(get_db),
 ):
-    hs = load_harness_session(session_id, db)
-    _wire_session(hs)
+    hs = load_react_harness_session(session_id, db)
 
     try:
-        await hs.record_user_answer(body.question_id, body.answer)
+        hs.queue_resume(body.question_id, body.answer)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except RuntimeError as exc:
@@ -193,13 +183,28 @@ async def resume_session(
     return {"status": "resumed", "session_id": session_id}
 
 
+@router.post("/sessions/{session_id}/messages")
+async def continue_session(
+    session_id: str,
+    body: ContinueRequest,
+    db: Session = Depends(get_db),
+):
+    hs = load_react_harness_session(session_id, db)
+
+    try:
+        hs.queue_user_message(body.message)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+
+    return {"status": "queued", "session_id": session_id}
+
+
 @router.post("/sessions/{session_id}/apply")
 async def apply_session(
     session_id: str,
     db: Session = Depends(get_db),
 ):
-    hs = load_harness_session(session_id, db)
-    _wire_session(hs)
+    hs = load_react_harness_session(session_id, db)
     result = await hs.apply()
     return ApplyResponse(**result)
 
@@ -209,6 +214,6 @@ async def abort_session(
     session_id: str,
     db: Session = Depends(get_db),
 ):
-    hs = load_harness_session(session_id, db)
+    hs = load_react_harness_session(session_id, db)
     hs.abort()
     return {"status": "aborted", "session_id": session_id}

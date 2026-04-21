@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { harnessApi } from '../services/harnessApi'
 import { useHarnessStore } from '../stores/harnessStore'
 import { useWorkflowStore } from '../stores/workflowStore'
-import { HARNESS_EVENT_TYPES, type HarnessEvent } from '../types/harness'
+import { HARNESS_EVENT_TYPES, type HarnessEvent, type HarnessStatus } from '../types/harness'
 
 let activeEventSource: EventSource | null = null
 
@@ -16,6 +16,18 @@ function getErrorMessage(error: unknown, fallback: string) {
     return error.message
   }
   return fallback
+}
+
+function isHarnessStatus(status: unknown): status is HarnessStatus {
+  return (
+    status === 'idle' ||
+    status === 'running' ||
+    status === 'awaiting_user' ||
+    status === 'waiting' ||
+    status === 'ready' ||
+    status === 'failed' ||
+    status === 'applied'
+  )
 }
 
 export function useHarnessSession(options: UseHarnessSessionOptions = {}) {
@@ -32,6 +44,9 @@ export function useHarnessSession(options: UseHarnessSessionOptions = {}) {
     setStatus,
     setGoal,
     appendEvent,
+    appendMessage,
+    updateLastAgentMessage,
+    finalizeAgentMessage,
     setGraphSnapshot,
     setOpenQuestion,
     setError,
@@ -64,16 +79,43 @@ export function useHarnessSession(options: UseHarnessSessionOptions = {}) {
         break
       }
 
+      case 'agent_message_delta': {
+        if (event.content) {
+          updateLastAgentMessage(event.content as string)
+        }
+        break
+      }
+
+      case 'agent_message': {
+        if (event.content) {
+          finalizeAgentMessage(event.content as string)
+        }
+        break
+      }
+
       case 'decision': {
-        // trace only
+        // trace only (legacy)
         break
       }
 
       case 'tool_call': {
+        appendMessage({
+          id: `msg-${Date.now()}`,
+          role: 'tool_call',
+          content: '',
+          tool: event.tool,
+          args: event.args,
+        })
         break
       }
 
       case 'tool_result': {
+        appendMessage({
+          id: `msg-${Date.now()}`,
+          role: 'tool_result',
+          content: event.summary || event.error || '',
+          tool: event.tool,
+        })
         break
       }
 
@@ -112,6 +154,8 @@ export function useHarnessSession(options: UseHarnessSessionOptions = {}) {
             prompt: event.prompt,
             options: event.options || null,
           })
+        } else {
+          setOpenQuestion(null)
         }
         disconnect()
         break
@@ -144,12 +188,17 @@ export function useHarnessSession(options: UseHarnessSessionOptions = {}) {
         if (event.status === 'failed') {
           setStatus('failed')
           setError(event.reason || 'Session ended with failure')
+        } else if (isHarnessStatus(event.status)) {
+          setStatus(event.status)
+          if (event.status !== 'awaiting_user') {
+            setOpenQuestion(null)
+          }
         }
         disconnect()
         break
       }
     }
-  }, [appendEvent, setStatus, setGoal, setGraphSnapshot, setDraftSnapshot, setOpenQuestion, disconnect, setError, setDraftWorkflow, setAllNodeVisuals])
+  }, [appendEvent, setStatus, setGoal, setGraphSnapshot, setDraftSnapshot, setOpenQuestion, disconnect, setError, setDraftWorkflow, setAllNodeVisuals, appendMessage, updateLastAgentMessage, finalizeAgentMessage])
 
   const connect = useCallback((id: string) => {
     disconnect()
@@ -179,14 +228,17 @@ export function useHarnessSession(options: UseHarnessSessionOptions = {}) {
         setError('Harness 事件流连接失败，请重试')
       }
       es.close()
+      if (activeEventSource === es) {
+        activeEventSource = null
+      }
     }
   }, [disconnect, handleEvent, setError, setRunning])
 
   // Lock/unlock canvas based on harness status
   useEffect(() => {
-    const locked = status === 'running' || status === 'awaiting_user' || status === 'failed'
+    const locked = status === 'running' || (status === 'awaiting_user' && Boolean(openQuestion)) || status === 'failed'
     setHarnessLocked(locked)
-  }, [status, setHarnessLocked])
+  }, [status, openQuestion, setHarnessLocked])
 
   useEffect(() => {
     if (!autoConnect) return
@@ -205,6 +257,12 @@ export function useHarnessSession(options: UseHarnessSessionOptions = {}) {
       setSessionId(created.session_id)
       setStatus('running')
       setGoal(goal)
+      // Add user message to chat
+      appendMessage({
+        id: `msg-${Date.now()}`,
+        role: 'user',
+        content: goal,
+      })
       return created
     } catch (err) {
       const message = getErrorMessage(err, '创建 Harness 会话失败')
@@ -218,6 +276,12 @@ export function useHarnessSession(options: UseHarnessSessionOptions = {}) {
   const resumeSession = async (questionId: string, answer: string) => {
     if (!sessionId) return
     setError(null)
+    // Add user answer to chat
+    appendMessage({
+      id: `msg-${Date.now()}`,
+      role: 'user',
+      content: answer,
+    })
     try {
       await harnessApi.resumeSession(sessionId, questionId, answer)
       setStatus('running')
@@ -226,6 +290,26 @@ export function useHarnessSession(options: UseHarnessSessionOptions = {}) {
       connect(sessionId)
     } catch (err) {
       const message = getErrorMessage(err, '恢复会话失败')
+      setError(message)
+      throw err
+    }
+  }
+
+  const continueSession = async (messageText: string) => {
+    if (!sessionId) return
+    setError(null)
+    appendMessage({
+      id: `msg-${Date.now()}`,
+      role: 'user',
+      content: messageText,
+    })
+    try {
+      await harnessApi.continueSession(sessionId, messageText)
+      setStatus('running')
+      setOpenQuestion(null)
+      connect(sessionId)
+    } catch (err) {
+      const message = getErrorMessage(err, '继续会话失败')
       setError(message)
       throw err
     }
@@ -266,6 +350,7 @@ export function useHarnessSession(options: UseHarnessSessionOptions = {}) {
     isConnecting,
     createSession,
     resumeSession,
+    continueSession,
     applySession,
     abortSession,
     reset,

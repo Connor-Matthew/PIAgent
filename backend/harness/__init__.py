@@ -1,3 +1,8 @@
+"""PIAgent Harness — Workflow authoring agent system.
+
+New code should use ReActBuilderAgentRunner and ReActHarnessSession.
+"""
+
 from backend.harness.actions import (
     AddEdgeAction,
     AddNodeAction,
@@ -9,10 +14,13 @@ from backend.harness.actions import (
     action_summary,
 )
 from backend.harness.builder import GraphBuilder
-from backend.harness.lead_agent import LeadAgent
-from backend.harness.llm_client import HarnessLLMClient
-from backend.harness.memory import EventLog
 from backend.harness.preferences import PreferenceStore
+from backend.harness.react_runner import ReActBuilderAgentRunner
+from backend.harness.react_session import (
+    ReActHarnessSession,
+    create_react_harness_session,
+    load_react_harness_session,
+)
 from backend.harness.schemas import (
     AskUser,
     CallTool,
@@ -21,11 +29,6 @@ from backend.harness.schemas import (
     Finding,
     LoadSkill,
     ProposeAction,
-)
-from backend.harness.session import (
-    HarnessSession,
-    create_harness_session,
-    load_harness_session,
 )
 from backend.harness.skills.loader import SkillLoader
 from backend.harness.tools.base import HarnessContext, Tool, ToolRegistry
@@ -41,25 +44,24 @@ from backend.harness.workspace import (
 )
 
 __all__ = [
+    "ReActBuilderAgentRunner",
+    "ReActHarnessSession",
+    "create_react_harness_session",
+    "load_react_harness_session",
     "AddEdgeAction",
     "AddNodeAction",
-    "AskUser",
     "Budget",
     "BuilderError",
     "CallTool",
     "Decision",
     "DeleteEdgeAction",
     "DeleteNodeAction",
-    "EventLog",
     "FactsLedger",
     "Finalize",
     "Finding",
     "GraphAction",
     "GraphBuilder",
     "HarnessContext",
-    "HarnessLLMClient",
-    "HarnessSession",
-    "LeadAgent",
     "LoadSkill",
     "Observation",
     "PreferenceStore",
@@ -73,7 +75,5 @@ __all__ = [
     "UpdateNodeConfigAction",
     "Workspace",
     "action_summary",
-    "create_harness_session",
-    "load_harness_session",
     "validate_graph",
 ]

@@ -3,7 +3,7 @@ import { useWorkflowStore } from '../../stores/workflowStore'
 import { useHarnessStore } from '../../stores/harnessStore'
 import { useDebugStore } from '../../stores/debugStore'
 import { NodeConfig } from './NodeConfig'
-import { AgentStatusPanel } from '../agent/AgentStatusPanel'
+import { AgentPanel } from '../agent/AgentPanel'
 import { DebugRunPanel } from '../debug/DebugRunPanel'
 
 type TabKey = 'config' | 'agent' | 'run'
@@ -90,7 +90,7 @@ export function RightPanel() {
       {/* Content */}
       <div className="flex-1 overflow-hidden">
         {activeTab === 'config' && <NodeConfig />}
-        {activeTab === 'agent' && <AgentStatusPanel />}
+        {activeTab === 'agent' && <AgentPanel />}
         {activeTab === 'run' && <DebugRunPanel />}
       </div>
     </div>
