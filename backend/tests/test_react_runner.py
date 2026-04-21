@@ -288,6 +288,69 @@ async def test_react_session_plain_agent_reply_waits_for_next_user_turn(db):
     assert collected[-1] == {"type": "session_end", "status": "waiting"}
 
 
+@pytest.mark.asyncio
+async def test_react_session_persists_ready_if_client_disconnects_after_ready_event(db):
+    hs = create_react_harness_session(db, goal="Build a workflow")
+
+    class ReadyRunner:
+        async def run(self, messages, on_event=None):
+            if on_event is not None:
+                await on_event({"type": "harness_ready", "snapshot": hs.builder.snapshot()})
+            return [*messages, AIMessage(content="Ready")]
+
+    hs._runner = ReadyRunner()
+
+    async def disconnect_after_ready(event):
+        if event.get("type") == "harness_ready":
+            raise asyncio.CancelledError()
+
+    with pytest.raises(asyncio.CancelledError):
+        await hs.run(on_event=disconnect_after_ready)
+
+    loaded = load_react_harness_session(hs.id, db)
+    assert loaded.status == "ready"
+
+    loaded.queue_user_message("Add a TTS step")
+    reloaded = load_react_harness_session(hs.id, db)
+    assert reloaded.status == "running"
+    assert reloaded.messages[-1].content == "Add a TTS step"
+
+
+@pytest.mark.asyncio
+async def test_react_session_persists_open_question_if_client_disconnects_after_ask_event(db):
+    hs = create_react_harness_session(db, goal="Build a workflow")
+
+    class AskRunner:
+        async def run(self, messages, on_event=None):
+            hs.workspace.set_open_question("Which provider?", ["openai"], question_id="q1")
+            if on_event is not None:
+                await on_event({
+                    "type": "awaiting_user_input",
+                    "question_id": "q1",
+                    "prompt": "Which provider?",
+                    "options": ["openai"],
+                })
+            return [*messages, AIMessage(content="Need provider")]
+
+    hs._runner = AskRunner()
+
+    async def disconnect_after_question(event):
+        if event.get("type") == "awaiting_user_input":
+            raise asyncio.CancelledError()
+
+    with pytest.raises(asyncio.CancelledError):
+        await hs.run(on_event=disconnect_after_question)
+
+    loaded = load_react_harness_session(hs.id, db)
+    assert loaded.status == "awaiting_user"
+    assert loaded.workspace.open_question["question_id"] == "q1"
+
+    loaded.queue_resume("q1", "openai")
+    reloaded = load_react_harness_session(hs.id, db)
+    assert reloaded.status == "running"
+    assert reloaded.messages[-1].content == "User answered: openai"
+
+
 def test_react_session_queue_user_message_reopens_waiting_session(db):
     hs = create_react_harness_session(db, goal="Build a workflow")
     hs._status = "waiting"

@@ -147,8 +147,12 @@ class ReActHarnessSession:
             etype = event.get("type", "")
             if etype == "harness_ready":
                 _ready_seen = True
+                self._status = "ready"
+                self._persist()
             if etype == "awaiting_user_input":
                 _paused_seen = True
+                self._status = "awaiting_user"
+                self._persist()
             if on_event is not None:
                 await on_event(event)
 
