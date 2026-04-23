@@ -33,8 +33,8 @@ export function AudioPlayer() {
   if (!audioUrl) return null
 
   return (
-    <div className={`bg-slate-950 border border-slate-700 rounded-xl p-4 ${!audioUrl ? 'opacity-40' : ''}`}>
-      <div className="text-sm text-slate-400 mb-3">🎧 AI 播客播放器</div>
+    <div className={`bg-white border border-gray-200 p-4 ${!audioUrl ? 'opacity-40' : ''}`}>
+      <div className="text-sm text-gray-500 mb-3">AI 播客播放器</div>
       <audio
         ref={audioRef}
         src={audioUrl}
@@ -49,7 +49,7 @@ export function AudioPlayer() {
         onLoadedMetadata={() => setDuration(audioRef.current?.duration ?? 0)}
         onEnded={() => setIsPlaying(false)}
       />
-      <div className="bg-slate-800 rounded-full h-1 mb-3 cursor-pointer"
+      <div className="bg-gray-100 h-1 mb-3 cursor-pointer"
         onClick={(e) => {
           if (!audioRef.current || !duration) return
           const rect = e.currentTarget.getBoundingClientRect()
@@ -58,20 +58,20 @@ export function AudioPlayer() {
         }}
       >
         <div
-          className="bg-blue-500 rounded-full h-full"
+          className="bg-black h-full"
           style={{ width: duration ? `${(currentTime / duration) * 100}%` : '0%' }}
         />
       </div>
       <div className="flex justify-between items-center">
-        <span className="text-slate-600 text-xs">{formatTime(currentTime)}</span>
+        <span className="text-gray-400 text-xs">{formatTime(currentTime)}</span>
         <button
           onClick={togglePlay}
           disabled={!audioUrl}
-          className="bg-blue-500 text-white w-8 h-8 rounded-full flex items-center justify-center disabled:opacity-50"
+          className="bg-black text-white w-8 h-8 flex items-center justify-center disabled:opacity-50"
         >
           {isPlaying ? '⏸' : '▶'}
         </button>
-        <span className="text-slate-600 text-xs">{duration ? formatTime(duration) : '--:--'}</span>
+        <span className="text-gray-400 text-xs">{duration ? formatTime(duration) : '--:--'}</span>
       </div>
     </div>
   )

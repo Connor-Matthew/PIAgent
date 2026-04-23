@@ -43,29 +43,29 @@ export function RightPanel() {
   ]
 
   return (
-    <div className="w-[380px] bg-slate-900 border-l border-slate-800 shrink-0 flex flex-col overflow-hidden">
+    <div className="w-[380px] bg-white border-l border-gray-200 shrink-0 flex flex-col overflow-hidden">
       {/* Tabs */}
-      <div className="flex border-b border-slate-800">
+      <div className="flex border-b border-gray-200">
         {tabs.map((tab) => (
           <button
             key={tab.key}
             onClick={() => setManualTab(tab.key)}
             className={`flex-1 px-3 py-3 text-xs font-medium transition-colors relative ${
               activeTab === tab.key
-                ? 'text-slate-100 bg-slate-800/50'
-                : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800/30'
+                ? 'text-black bg-gray-50'
+                : 'text-gray-400 hover:text-gray-700 hover:bg-gray-50/50'
             }`}
           >
             {tab.label}
             {tab.badge && (
               <span
-                className={`ml-1.5 inline-block w-1.5 h-1.5 rounded-full ${
-                  activeTab === tab.key ? 'bg-blue-400' : 'bg-slate-600'
+                className={`ml-1.5 inline-block w-1.5 h-1.5 ${
+                  activeTab === tab.key ? 'bg-red-600' : 'bg-gray-300'
                 }`}
               />
             )}
             {activeTab === tab.key && (
-              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500" />
+              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-red-600" />
             )}
           </button>
         ))}

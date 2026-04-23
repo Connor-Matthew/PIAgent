@@ -35,8 +35,8 @@ export function NodeConfig() {
   if (!selectedNode) {
     return (
       <div className="h-full flex flex-col p-4">
-        <div className="text-xs text-slate-500 uppercase tracking-wider mb-4">节点配置</div>
-        <div className="text-sm text-slate-600 text-center mt-8">选择一个节点查看配置</div>
+        <div className="text-xs text-gray-400 uppercase tracking-wider mb-4">节点配置</div>
+        <div className="text-sm text-gray-400 text-center mt-8">选择一个节点查看配置</div>
       </div>
     )
   }
@@ -58,10 +58,10 @@ export function NodeConfig() {
 
   return (
     <div className="h-full overflow-y-auto p-4">
-      <div className="text-xs text-slate-500 uppercase tracking-wider mb-4">节点配置</div>
-      <div className="text-sm text-slate-200 font-semibold mb-4 flex items-center gap-2">
+      <div className="text-xs text-gray-400 uppercase tracking-wider mb-4">节点配置</div>
+      <div className="text-sm text-gray-900 font-semibold mb-4 flex items-center gap-2">
         {data.label}
-        {data.locked && <span className="text-[10px] bg-slate-700 text-slate-300 px-1.5 py-0.5 rounded">锁定</span>}
+        {data.locked && <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5">锁定</span>}
       </div>
 
       {data.nodeType === 'start' && (
@@ -79,15 +79,15 @@ export function NodeConfig() {
       {data.nodeType === 'rag' && (
         <>
           <label className="block mb-3">
-            <span className="text-xs text-slate-400 block mb-1">知识库 ID</span>
+            <span className="text-xs text-gray-500 block mb-1">知识库 ID</span>
             <input
               value={(config.knowledge_base_id as string) || ''}
               onChange={(e) => updateConfig('knowledge_base_id', e.target.value)}
-              className="w-full bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-sm text-slate-200"
+              className="w-full bg-white border border-gray-200 px-2 py-1.5 text-sm text-gray-900 focus:border-black focus:outline-none"
             />
           </label>
           <label className="block mb-3">
-            <span className="text-xs text-slate-400 block mb-1">Top-K: {(config.top_k as number) ?? 3}</span>
+            <span className="text-xs text-gray-500 block mb-1">Top-K: {(config.top_k as number) ?? 3}</span>
             <input
               type="range" min="1" max="10" step="1"
               value={(config.top_k as number) ?? 3}
@@ -96,12 +96,12 @@ export function NodeConfig() {
             />
           </label>
           <label className="block mb-3">
-            <span className="text-xs text-slate-400 block mb-1">查询引用</span>
+            <span className="text-xs text-gray-500 block mb-1">查询引用</span>
             <input
               value={(config.query_ref as string) || ''}
               onChange={(e) => updateConfig('query_ref', e.target.value)}
               placeholder="例如：{{start_1.question}}"
-              className="w-full bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-sm text-slate-200"
+              className="w-full bg-white border border-gray-200 px-2 py-1.5 text-sm text-gray-900 focus:border-black focus:outline-none"
             />
           </label>
         </>
@@ -138,16 +138,16 @@ function AdditionalConfigFields({
   if (entries.length === 0) return null
 
   return (
-    <div className="mt-5 pt-4 border-t border-slate-800 space-y-3">
-      <div className="text-xs text-slate-400">其他已保存参数</div>
+    <div className="mt-5 pt-4 border-t border-gray-200 space-y-3">
+      <div className="text-xs text-gray-500">其他已保存参数</div>
       {entries.map(([key, value]) => (
         <label key={key} className="block">
-          <span className="text-[10px] text-slate-400 block mb-1">{key}</span>
+          <span className="text-[10px] text-gray-500 block mb-1">{key}</span>
           <textarea
             readOnly
             value={formatConfigValue(value)}
             rows={typeof value === 'object' && value !== null ? 5 : 2}
-            className="w-full bg-slate-950 border border-slate-800 rounded-md px-2 py-1.5 text-xs text-slate-300 font-mono resize-none"
+            className="w-full bg-gray-50 border border-gray-200 px-2 py-1.5 text-xs text-gray-600 font-mono resize-none"
           />
         </label>
       ))}
@@ -185,33 +185,33 @@ function StartNodeConfig({
 
   return (
     <div className="space-y-4">
-      <div className="text-xs text-slate-400">输入字段配置</div>
+      <div className="text-xs text-gray-500">输入字段配置</div>
       {inputs.map((field, idx) => (
-        <div key={idx} className="bg-slate-800 border border-slate-700 rounded-md p-2.5 space-y-2">
+        <div key={idx} className="bg-white border border-gray-200 p-2.5 space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-slate-500">字段 {idx + 1}</span>
+            <span className="text-xs text-gray-400">字段 {idx + 1}</span>
             <button
               onClick={() => removeField(idx)}
-              className="text-[10px] text-red-400 hover:text-red-300"
+              className="text-[10px] text-red-600 hover:text-red-500"
             >
               删除
             </button>
           </div>
           <div className="grid grid-cols-2 gap-2">
             <label className="block">
-              <span className="text-[10px] text-slate-400 block">名称</span>
+              <span className="text-[10px] text-gray-500 block">名称</span>
               <input
                 value={field.name}
                 onChange={(e) => updateField(idx, { name: e.target.value })}
-                className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200"
+                className="w-full bg-gray-50 border border-gray-200 px-2 py-1 text-xs text-gray-900 focus:border-black focus:outline-none"
               />
             </label>
             <label className="block">
-              <span className="text-[10px] text-slate-400 block">类型</span>
+              <span className="text-[10px] text-gray-500 block">类型</span>
               <select
                 value={field.type}
                 onChange={(e) => updateField(idx, { type: e.target.value as InputFieldType })}
-                className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200"
+                className="w-full bg-gray-50 border border-gray-200 px-2 py-1 text-xs text-gray-900 focus:border-black focus:outline-none"
               >
                 <option value="text">文本</option>
                 <option value="number">数字</option>
@@ -222,21 +222,21 @@ function StartNodeConfig({
           </div>
           {field.type === 'select' && (
             <label className="block">
-              <span className="text-[10px] text-slate-400 block">选项（逗号分隔）</span>
+              <span className="text-[10px] text-gray-500 block">选项（逗号分隔）</span>
               <input
                 value={(field.options || []).join(',')}
                 onChange={(e) => updateField(idx, { options: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) })}
-                className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200"
+                className="w-full bg-gray-50 border border-gray-200 px-2 py-1 text-xs text-gray-900 focus:border-black focus:outline-none"
               />
             </label>
           )}
           <div className="grid grid-cols-2 gap-2">
             <label className="block">
-              <span className="text-[10px] text-slate-400 block">默认值</span>
+              <span className="text-[10px] text-gray-500 block">默认值</span>
               <input
                 value={(field.default as string | number) ?? ''}
                 onChange={(e) => updateField(idx, { default: e.target.value })}
-                className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200"
+                className="w-full bg-gray-50 border border-gray-200 px-2 py-1 text-xs text-gray-900 focus:border-black focus:outline-none"
               />
             </label>
             <label className="flex items-center gap-2 pt-4">
@@ -244,16 +244,16 @@ function StartNodeConfig({
                 type="checkbox"
                 checked={!!field.required}
                 onChange={(e) => updateField(idx, { required: e.target.checked })}
-                className="rounded border-slate-600"
+                className="border-gray-300"
               />
-              <span className="text-[10px] text-slate-400">必填</span>
+              <span className="text-[10px] text-gray-500">必填</span>
             </label>
           </div>
         </div>
       ))}
       <button
         onClick={addField}
-        className="w-full py-1.5 text-xs border border-dashed border-slate-600 text-slate-400 rounded hover:border-slate-500 hover:text-slate-300"
+        className="w-full py-1.5 text-xs border border-dashed border-gray-300 text-gray-500 hover:border-gray-400 hover:text-gray-700"
       >
         + 添加输入字段
       </button>
@@ -322,35 +322,35 @@ function EndNodeConfig({
 
   return (
     <div className="space-y-4">
-      <div className="text-xs text-slate-400">输出变量配置</div>
+      <div className="text-xs text-gray-500">输出变量配置</div>
       {outputs.map((out, idx) => (
-        <div key={idx} className="bg-slate-800 border border-slate-700 rounded-md p-2.5 space-y-2">
+        <div key={idx} className="bg-white border border-gray-200 p-2.5 space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-slate-500">变量 {idx + 1}</span>
+            <span className="text-xs text-gray-400">变量 {idx + 1}</span>
             <button
               onClick={() => removeOutput(idx)}
-              className="text-[10px] text-red-400 hover:text-red-300"
+              className="text-[10px] text-red-600 hover:text-red-500"
             >
               删除
             </button>
           </div>
           <div className="grid grid-cols-2 gap-2">
             <label className="block">
-              <span className="text-[10px] text-slate-400 block">参数名</span>
+              <span className="text-[10px] text-gray-500 block">参数名</span>
               <input
                 value={out.name}
                 onChange={(e) => updateOutput(idx, { name: e.target.value })}
-                className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200"
+                className="w-full bg-gray-50 border border-gray-200 px-2 py-1 text-xs text-gray-900 focus:border-black focus:outline-none"
               />
             </label>
             <label className="block">
-              <span className="text-[10px] text-slate-400 block">类型</span>
+              <span className="text-[10px] text-gray-500 block">类型</span>
               <select
                 value={out.source}
                 onChange={(e) =>
                   updateOutput(idx, { source: e.target.value as EndOutputField['source'], value: '' })
                 }
-                className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200"
+                className="w-full bg-gray-50 border border-gray-200 px-2 py-1 text-xs text-gray-900 focus:border-black focus:outline-none"
               >
                 <option value="static">输入（字面量）</option>
                 <option value="reference">引用</option>
@@ -373,7 +373,7 @@ function EndNodeConfig({
                   const field = fields[0] || ''
                   updateOutput(idx, { value: `{{${nodeId}.${field}}}` })
                 }}
-                className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200"
+                className="bg-gray-50 border border-gray-200 px-2 py-1 text-xs text-gray-900 focus:border-black focus:outline-none"
               >
                 <option value="">选择节点</option>
                 {upstreamNodes.map((n) => (
@@ -393,7 +393,7 @@ function EndNodeConfig({
                   if (!nodeId) return
                   updateOutput(idx, { value: `{{${nodeId}.${e.target.value}}}` })
                 }}
-                className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200"
+                className="bg-gray-50 border border-gray-200 px-2 py-1 text-xs text-gray-900 focus:border-black focus:outline-none"
               >
                 <option value="">选择字段</option>
                 {(() => {
@@ -412,37 +412,37 @@ function EndNodeConfig({
               value={out.value}
               onChange={(e) => updateOutput(idx, { value: e.target.value })}
               placeholder="字面量值"
-              className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200"
+              className="w-full bg-gray-50 border border-gray-200 px-2 py-1 text-xs text-gray-900 focus:border-black focus:outline-none"
             />
           )}
         </div>
       ))}
       <button
         onClick={addOutput}
-        className="w-full py-1.5 text-xs border border-dashed border-slate-600 text-slate-400 rounded hover:border-slate-500 hover:text-slate-300"
+        className="w-full py-1.5 text-xs border border-dashed border-gray-300 text-gray-500 hover:border-gray-400 hover:text-gray-700"
       >
         + 添加输出变量
       </button>
 
-      <div className="pt-2 border-t border-slate-800">
-        <div className="text-xs text-slate-400 mb-2">回答内容模板</div>
+      <div className="pt-2 border-t border-gray-200">
+        <div className="text-xs text-gray-500 mb-2">回答内容模板</div>
         <textarea
           ref={answerRef}
           value={answer}
           onChange={(e) => updateConfig('answer', e.target.value)}
           rows={4}
-          placeholder="例如：🎧 {{title}} 已生成，链接：{{audio_url}}"
-          className="w-full bg-slate-900 border border-slate-700 rounded-md px-2 py-1.5 text-sm text-slate-200 resize-none"
+          placeholder="例如：{{title}} 已生成，链接：{{audio_url}}"
+          className="w-full bg-white border border-gray-200 px-2 py-1.5 text-sm text-gray-900 resize-none focus:border-black focus:outline-none"
         />
         <div className="mt-2 flex flex-wrap gap-2">
-          <span className="text-[10px] text-slate-500 self-center">插入：</span>
+          <span className="text-[10px] text-gray-400 self-center">插入：</span>
           {localVars.length > 0 && (
             <>
               {localVars.map((v) => (
                 <button
                   key={v}
                   onClick={() => insertAtCursor(`{{${v}}}`)}
-                  className="text-[10px] bg-blue-500/20 text-blue-300 px-1.5 py-0.5 rounded hover:bg-blue-500/30"
+                  className="text-[10px] bg-gray-100 text-gray-700 px-1.5 py-0.5 hover:bg-gray-200"
                 >
                   {`{{${v}}}`}
                 </button>
@@ -454,7 +454,7 @@ function EndNodeConfig({
               <button
                 key={`${n.id}.${f}`}
                 onClick={() => insertAtCursor(`{{${n.id}.${f}}}`)}
-                className="text-[10px] bg-slate-700 text-slate-300 px-1.5 py-0.5 rounded hover:bg-slate-600"
+                className="text-[10px] bg-gray-100 text-gray-700 px-1.5 py-0.5 hover:bg-gray-200"
               >
                 {`{{${n.id}.${f}}}`}
               </button>
@@ -524,14 +524,14 @@ function LlmNodeConfig({
   return (
     <>
       <label className="block mb-3">
-        <span className="text-xs text-slate-400 block mb-1">Provider 实例</span>
+        <span className="text-xs text-gray-500 block mb-1">Provider 实例</span>
         <select
           value={providerId != null ? String(providerId) : ''}
           onChange={(e) => {
             const val = e.target.value ? parseInt(e.target.value, 10) : undefined
             handleProviderChange(val)
           }}
-          className="w-full bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-sm text-slate-200"
+          className="w-full bg-white border border-gray-200 px-2 py-1.5 text-sm text-gray-900 focus:border-black focus:outline-none"
         >
           <option value="">请选择 Provider</option>
           {providers.map((p) => (
@@ -543,14 +543,14 @@ function LlmNodeConfig({
       </label>
 
       <label className="block mb-3">
-        <span className="text-xs text-slate-400 block mb-1">模型</span>
+        <span className="text-xs text-gray-500 block mb-1">模型</span>
         <div className="flex items-center gap-2">
           {hasModels ? (
             <select
               value={(config.model as string) || ''}
               onChange={(e) => updateConfig('model', e.target.value)}
               disabled={!providerId || loading}
-              className="flex-1 bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-sm text-slate-200 disabled:opacity-50"
+              className="flex-1 bg-white border border-gray-200 px-2 py-1.5 text-sm text-gray-900 disabled:opacity-50 focus:border-black focus:outline-none"
             >
               <option value="">{loading ? '加载中...' : '请选择模型'}</option>
               {models.map((m) => (
@@ -565,7 +565,7 @@ function LlmNodeConfig({
               onChange={(e) => updateConfig('model', e.target.value)}
               disabled={!providerId}
               placeholder={providerId ? (loading ? '加载中...' : '无可用模型，手动输入') : '请先选择 Provider'}
-              className="flex-1 bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-sm text-slate-200 disabled:opacity-50"
+              className="flex-1 bg-white border border-gray-200 px-2 py-1.5 text-sm text-gray-900 disabled:opacity-50 focus:border-black focus:outline-none"
             />
           )}
           <button
@@ -573,15 +573,15 @@ function LlmNodeConfig({
             onClick={refresh}
             disabled={!providerId || loading}
             title="刷新模型列表"
-            className="px-2 py-1.5 text-sm border border-slate-600 rounded-md hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-2 py-1.5 text-sm border border-gray-200 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            🔄
+            刷新
           </button>
         </div>
       </label>
 
       <label className="block mb-3">
-        <span className="text-xs text-slate-400 block mb-1">Temperature: {(config.temperature as number) ?? 0.7}</span>
+        <span className="text-xs text-gray-500 block mb-1">Temperature: {(config.temperature as number) ?? 0.7}</span>
         <input
           type="range" min="0" max="1" step="0.1"
           value={(config.temperature as number) ?? 0.7}
@@ -595,29 +595,29 @@ function LlmNodeConfig({
           type="checkbox"
           checked={(config.streaming as boolean | undefined) ?? true}
           onChange={(e) => updateConfig('streaming', e.target.checked)}
-          className="rounded border-slate-600"
+          className="border-gray-300"
         />
-        <span className="text-xs text-slate-400">流式输出</span>
+        <span className="text-xs text-gray-500">流式输出</span>
       </label>
 
       <label className="block mb-3">
-        <span className="text-xs text-slate-400 block mb-1">System Prompt</span>
+        <span className="text-xs text-gray-500 block mb-1">System Prompt</span>
         <textarea
           value={(config.system_prompt as string) || ''}
           onChange={(e) => updateConfig('system_prompt', e.target.value)}
           rows={4}
-          className="w-full bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-sm text-slate-200 resize-none"
+          className="w-full bg-white border border-gray-200 px-2 py-1.5 text-sm text-gray-900 resize-none focus:border-black focus:outline-none"
         />
       </label>
 
       <label className="block mb-3">
-        <span className="text-xs text-slate-400 block mb-1">Prompt 模板</span>
+        <span className="text-xs text-gray-500 block mb-1">Prompt 模板</span>
         <textarea
           value={(config.prompt_template as string) || ''}
           onChange={(e) => updateConfig('prompt_template', e.target.value)}
           rows={4}
           placeholder="例如：{{start_1.question}}"
-          className="w-full bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-sm text-slate-200 resize-none"
+          className="w-full bg-white border border-gray-200 px-2 py-1.5 text-sm text-gray-900 resize-none focus:border-black focus:outline-none"
         />
       </label>
     </>
@@ -650,7 +650,7 @@ function TtsNodeConfig({
   return (
     <>
       <label className="block mb-3">
-        <span className="text-xs text-slate-400 block mb-1">Provider 实例</span>
+        <span className="text-xs text-gray-500 block mb-1">Provider 实例</span>
         <select
           value={providerId != null ? String(providerId) : ''}
           onChange={(e) => {
@@ -661,7 +661,7 @@ function TtsNodeConfig({
               model: provider?.type === 'minimax_tts' ? 'speech-2.8-hd' : '',
             })
           }}
-          className="w-full bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-sm text-slate-200"
+          className="w-full bg-white border border-gray-200 px-2 py-1.5 text-sm text-gray-900 focus:border-black focus:outline-none"
         >
           <option value="">请选择 Provider</option>
           {ttsProviders.map((p) => (
@@ -674,11 +674,11 @@ function TtsNodeConfig({
 
       {isMiniMax && (
         <label className="block mb-3">
-          <span className="text-xs text-slate-400 block mb-1">模型</span>
+          <span className="text-xs text-gray-500 block mb-1">模型</span>
           <select
             value={(config.model as string) || 'speech-2.8-hd'}
             onChange={(e) => updateConfig('model', e.target.value)}
-            className="w-full bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-sm text-slate-200"
+            className="w-full bg-white border border-gray-200 px-2 py-1.5 text-sm text-gray-900 focus:border-black focus:outline-none"
           >
             {minimaxModels.map((m) => (
               <option key={m} value={m}>{m}</option>
@@ -688,45 +688,45 @@ function TtsNodeConfig({
       )}
 
       <label className="block mb-3">
-        <span className="text-xs text-slate-400 block mb-1">音色 ID (voice_id)</span>
+        <span className="text-xs text-gray-500 block mb-1">音色 ID (voice_id)</span>
         <input
           value={(config.voice_id as string) || ''}
           onChange={(e) => updateConfig('voice_id', e.target.value)}
           placeholder={isMiniMax ? '例如 male-qn-qingse' : '例如 default'}
-          className="w-full bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-sm text-slate-200"
+          className="w-full bg-white border border-gray-200 px-2 py-1.5 text-sm text-gray-900 focus:border-black focus:outline-none"
         />
       </label>
 
       <label className="block mb-3">
-        <span className="text-xs text-slate-400 block mb-1">文本引用</span>
+        <span className="text-xs text-gray-500 block mb-1">文本引用</span>
         <input
           value={(config.text_ref as string) || ''}
           onChange={(e) => updateConfig('text_ref', e.target.value)}
           placeholder="例如：{{llm_1.text}}"
-          className="w-full bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-sm text-slate-200"
+          className="w-full bg-white border border-gray-200 px-2 py-1.5 text-sm text-gray-900 focus:border-black focus:outline-none"
         />
       </label>
 
       <div className="grid grid-cols-2 gap-3 mb-3">
         <label className="block">
-          <span className="text-xs text-slate-400 block mb-1">最大分段长度</span>
+          <span className="text-xs text-gray-500 block mb-1">最大分段长度</span>
           <input
             type="number"
             min={1}
             value={(config.max_chars as number) ?? 500}
             onChange={(e) => updateConfig('max_chars', parseInt(e.target.value, 10))}
-            className="w-full bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-sm text-slate-200"
+            className="w-full bg-white border border-gray-200 px-2 py-1.5 text-sm text-gray-900 focus:border-black focus:outline-none"
           />
         </label>
         <label className="block">
-          <span className="text-xs text-slate-400 block mb-1">最大并发度</span>
+          <span className="text-xs text-gray-500 block mb-1">最大并发度</span>
           <input
             type="number"
             min={1}
             max={10}
             value={(config.max_concurrency as number) ?? 5}
             onChange={(e) => updateConfig('max_concurrency', parseInt(e.target.value, 10))}
-            className="w-full bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-sm text-slate-200"
+            className="w-full bg-white border border-gray-200 px-2 py-1.5 text-sm text-gray-900 focus:border-black focus:outline-none"
           />
         </label>
       </div>
@@ -734,11 +734,11 @@ function TtsNodeConfig({
       {isMiniMax && (
         <>
           <label className="block mb-3">
-            <span className="text-xs text-slate-400 block mb-1">情感</span>
+            <span className="text-xs text-gray-500 block mb-1">情感</span>
             <select
               value={(config.emotion as string) || 'happy'}
               onChange={(e) => updateConfig('emotion', e.target.value)}
-              className="w-full bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-sm text-slate-200"
+              className="w-full bg-white border border-gray-200 px-2 py-1.5 text-sm text-gray-900 focus:border-black focus:outline-none"
             >
               {emotions.map((em) => (
                 <option key={em} value={em}>{em}</option>
@@ -747,7 +747,7 @@ function TtsNodeConfig({
           </label>
 
           <label className="block mb-3">
-            <span className="text-xs text-slate-400 block mb-1">
+            <span className="text-xs text-gray-500 block mb-1">
               语速: {((config.speed as number) ?? 1.0).toFixed(1)}
             </span>
             <input
@@ -809,8 +809,8 @@ function IfElseNodeConfig({
   return (
     <div className="space-y-4">
       {branches.map((branch, idx) => (
-        <div key={branch.id} className="bg-slate-800 border border-slate-700 rounded-md p-2.5 space-y-2">
-          <div className="text-xs text-slate-500 font-medium">
+        <div key={branch.id} className="bg-white border border-gray-200 p-2.5 space-y-2">
+          <div className="text-xs text-gray-400 font-medium">
             {branch.id === 'true' ? 'True 分支' : 'False 分支'}
           </div>
 
@@ -821,12 +821,12 @@ function IfElseNodeConfig({
                   value={branch.condition?.left || ''}
                   onChange={(e) => updateCondition(idx, { left: e.target.value })}
                   placeholder="{{node.field}}"
-                  className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200"
+                  className="w-full bg-gray-50 border border-gray-200 px-2 py-1 text-xs text-gray-900 focus:border-black focus:outline-none"
                 />
                 <select
                   value={branch.condition?.op || 'eq'}
                   onChange={(e) => updateCondition(idx, { op: e.target.value })}
-                  className="bg-slate-900 border border-slate-700 rounded px-1 py-1 text-xs text-slate-200"
+                  className="bg-gray-50 border border-gray-200 px-1 py-1 text-xs text-gray-900 focus:border-black focus:outline-none"
                 >
                   {ops.map((o) => (
                     <option key={o.value} value={o.value}>{o.label}</option>
@@ -836,19 +836,19 @@ function IfElseNodeConfig({
                   value={branch.condition?.right || ''}
                   onChange={(e) => updateCondition(idx, { right: e.target.value })}
                   placeholder="值"
-                  className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200"
+                  className="w-full bg-gray-50 border border-gray-200 px-2 py-1 text-xs text-gray-900 focus:border-black focus:outline-none"
                 />
               </div>
             </>
           )}
 
           <label className="block">
-            <span className="text-[10px] text-slate-400 block mb-1">输出字段 (nodeId.field)</span>
+            <span className="text-[10px] text-gray-500 block mb-1">输出字段 (nodeId.field)</span>
             <input
               value={branch.outputField || ''}
               onChange={(e) => updateBranch(idx, { outputField: e.target.value })}
               placeholder="例如: echo_1.text"
-              className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200"
+              className="w-full bg-gray-50 border border-gray-200 px-2 py-1 text-xs text-gray-900 focus:border-black focus:outline-none"
             />
           </label>
         </div>
@@ -867,46 +867,46 @@ function IterationNodeConfig({
   return (
     <div className="space-y-4">
       <label className="block">
-        <span className="text-xs text-slate-400 block mb-1">输入引用 (数组)</span>
+        <span className="text-xs text-gray-500 block mb-1">输入引用 (数组)</span>
         <input
           value={(config.inputRef as string) || ''}
           onChange={(e) => updateConfig('inputRef', e.target.value)}
           placeholder="{{start_1.items}}"
-          className="w-full bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-sm text-slate-200"
+          className="w-full bg-white border border-gray-200 px-2 py-1.5 text-sm text-gray-900 focus:border-black focus:outline-none"
         />
       </label>
 
       <div className="grid grid-cols-2 gap-3">
         <label className="block">
-          <span className="text-xs text-slate-400 block mb-1">项变量名</span>
+          <span className="text-xs text-gray-500 block mb-1">项变量名</span>
           <input
             value={(config.itemVar as string) || 'item'}
             onChange={(e) => updateConfig('itemVar', e.target.value)}
-            className="w-full bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-sm text-slate-200"
+            className="w-full bg-white border border-gray-200 px-2 py-1.5 text-sm text-gray-900 focus:border-black focus:outline-none"
           />
         </label>
         <label className="block">
-          <span className="text-xs text-slate-400 block mb-1">索引变量名</span>
+          <span className="text-xs text-gray-500 block mb-1">索引变量名</span>
           <input
             value={(config.indexVar as string) || 'index'}
             onChange={(e) => updateConfig('indexVar', e.target.value)}
-            className="w-full bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-sm text-slate-200"
+            className="w-full bg-white border border-gray-200 px-2 py-1.5 text-sm text-gray-900 focus:border-black focus:outline-none"
           />
         </label>
       </div>
 
       <label className="block">
-        <span className="text-xs text-slate-400 block mb-1">输出字段 (nodeId.field)</span>
+        <span className="text-xs text-gray-500 block mb-1">输出字段 (nodeId.field)</span>
         <input
           value={(config.outputField as string) || ''}
           onChange={(e) => updateConfig('outputField', e.target.value)}
           placeholder="例如: echo_1.text"
-          className="w-full bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-sm text-slate-200"
+          className="w-full bg-white border border-gray-200 px-2 py-1.5 text-sm text-gray-900 focus:border-black focus:outline-none"
         />
       </label>
 
       <label className="block">
-        <span className="text-xs text-slate-400 block mb-1">
+        <span className="text-xs text-gray-500 block mb-1">
           最大并发度: {(config.maxConcurrency as number) || 5}
         </span>
         <input
@@ -921,11 +921,11 @@ function IterationNodeConfig({
       </label>
 
       <label className="block">
-        <span className="text-xs text-slate-400 block mb-1">错误策略</span>
+        <span className="text-xs text-gray-500 block mb-1">错误策略</span>
         <select
           value={(config.errorStrategy as string) || 'fail_fast'}
           onChange={(e) => updateConfig('errorStrategy', e.target.value)}
-          className="w-full bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-sm text-slate-200"
+          className="w-full bg-white border border-gray-200 px-2 py-1.5 text-sm text-gray-900 focus:border-black focus:outline-none"
         >
           <option value="fail_fast">快速失败</option>
           <option value="continue">继续执行</option>

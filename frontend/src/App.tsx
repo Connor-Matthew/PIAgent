@@ -98,29 +98,29 @@ function AppContent() {
   return (
     <div className="h-screen flex flex-col">
       {/* Header */}
-      <header className="bg-slate-900 border-b border-slate-800 px-4 py-2 flex items-center justify-between shrink-0">
+      <header className="bg-white border-b border-black px-4 py-2 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-4">
-          <Link to="/" className="text-blue-400 font-bold text-lg hover:text-blue-300">
+          <Link to="/" className="text-black font-bold text-lg hover:text-gray-600">
             PIAgent
           </Link>
-          <span className="text-slate-500 text-sm hidden sm:inline">可视化工作流编排平台</span>
-          <nav className="flex items-center gap-2 ml-4 border-l border-slate-700 pl-4">
+          <span className="text-gray-500 text-sm hidden sm:inline">可视化工作流编排平台</span>
+          <nav className="flex items-center gap-2 ml-4 border-l border-gray-300 pl-4">
             <Link
               to="/"
-              className={`text-xs px-3 py-1.5 rounded-md transition-colors ${
+              className={`text-xs px-3 py-1.5 transition-colors ${
                 isWorkflow
-                  ? 'bg-blue-500 text-white'
-                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
+                  ? 'bg-black text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200 hover:text-black'
               }`}
             >
               工作流
             </Link>
             <Link
               to="/providers"
-              className={`text-xs px-3 py-1.5 rounded-md transition-colors ${
+              className={`text-xs px-3 py-1.5 transition-colors ${
                 isProviders
-                  ? 'bg-blue-500 text-white'
-                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
+                  ? 'bg-black text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200 hover:text-black'
               }`}
             >
               Providers
@@ -130,19 +130,19 @@ function AppContent() {
         <div className="flex items-center gap-3">
           {isWorkflow && (
             <>
-              <span className="text-slate-400 text-sm">{workflowName}</span>
+              <span className="text-gray-600 text-sm">{workflowName}</span>
               <button
                 onClick={createNewWorkflow}
-                className="bg-slate-800 text-white text-xs px-3 py-1.5 rounded-md hover:bg-slate-700"
+                className="bg-gray-100 text-black text-xs px-3 py-1.5 hover:bg-gray-200"
               >
-                ➕ 新建
+                新建
               </button>
               <button
                 onClick={handleSave}
                 disabled={isSaving || !workflowId}
-                className="bg-slate-700 text-white text-xs px-3 py-1.5 rounded-md hover:bg-slate-600 disabled:opacity-50"
+                className="bg-black text-white text-xs px-3 py-1.5 hover:bg-gray-800 disabled:opacity-50"
               >
-                {isSaving ? '保存中...' : '💾 保存'}
+                {isSaving ? '保存中...' : '保存'}
               </button>
             </>
           )}

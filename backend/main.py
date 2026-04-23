@@ -70,6 +70,11 @@ def _seed_providers(db: Session):
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     _ensure_secret_key()
+    from pathlib import Path
+    from mini_harness.config import load_config, set_app_config
+
+    assistant_config_path = Path(__file__).resolve().parent / "assistant" / "mini_harness.yaml"
+    set_app_config(load_config(assistant_config_path))
     db = Session(bind=engine)
     try:
         _seed_providers(db)
@@ -94,9 +99,11 @@ app.mount("/audio", StaticFiles(directory=settings.audio_dir), name="audio")
 from backend.api.workflows import router as workflows_router
 from backend.api.knowledge import router as knowledge_router
 from backend.api.providers import router as providers_router
+from backend.assistant.routes import router as assistant_router
 app.include_router(workflows_router)
 app.include_router(knowledge_router)
 app.include_router(providers_router)
+app.include_router(assistant_router)
 
 
 @app.get("/api/health")
