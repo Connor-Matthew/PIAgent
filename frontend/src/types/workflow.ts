@@ -1,4 +1,4 @@
-export type NodeType = 'start' | 'llm' | 'rag' | 'agent' | 'tts' | 'end' | 'if_else' | 'iteration'
+export type NodeType = 'start' | 'llm' | 'rag' | 'tts' | 'end' | 'if_else' | 'iteration'
 export type NodeVisualState = 'idle' | 'building' | 'running' | 'completed' | 'failed'
 
 export type InputFieldType = 'text' | 'number' | 'select' | 'file'
@@ -11,7 +11,7 @@ export interface StartInputField {
   options?: string[]
 }
 
-export type OutputSource = 'input' | 'reference'
+export type OutputSource = 'static' | 'reference'
 
 export interface EndOutputField {
   name: string

@@ -3,12 +3,12 @@ import { useWorkflowStore } from '../../stores/workflowStore'
 import type { EndOutputField, InputFieldType, NodeType, StartInputField } from '../../types/workflow'
 import { providerApi } from '../../services/api'
 import type { Provider } from '../../types/provider'
+import { formatConfigValue, getAdditionalConfigEntries } from './nodeConfigUtils'
 
 const NODE_OUTPUT_FIELDS: Record<NodeType, string[]> = {
   start: [], // dynamic
   llm: ['text'],
   rag: ['context', 'documents'],
-  agent: ['text', 'steps'],
   tts: ['audio_url', 'duration'],
   end: [],
   if_else: ['branchTaken', 'result'],
@@ -17,6 +17,16 @@ const NODE_OUTPUT_FIELDS: Record<NodeType, string[]> = {
 
 const NODE_REFERENCE_PATTERN = /^\{\{([^\s.]+)\./
 const NODE_FIELD_REFERENCE_PATTERN = /^\{\{([^\s.]+)\.([^\s}]+)\}\}$/
+
+const RENDERED_CONFIG_FIELDS: Record<NodeType, string[]> = {
+  start: ['inputs'],
+  llm: ['provider_id', 'model', 'temperature', 'streaming', 'system_prompt', 'prompt_template'],
+  rag: ['knowledge_base_id', 'top_k', 'query_ref'],
+  tts: ['provider_id', 'model', 'voice_id', 'emotion', 'speed', 'max_chars', 'max_concurrency', 'text_ref'],
+  end: ['outputs', 'answer'],
+  if_else: ['branches'],
+  iteration: ['inputRef', 'itemVar', 'indexVar', 'outputField', 'maxConcurrency', 'errorStrategy'],
+}
 
 export function NodeConfig() {
   const { nodes, selectedNodeId, updateNodeData } = useWorkflowStore()
@@ -85,15 +95,20 @@ export function NodeConfig() {
               className="w-full"
             />
           </label>
+          <label className="block mb-3">
+            <span className="text-xs text-slate-400 block mb-1">查询引用</span>
+            <input
+              value={(config.query_ref as string) || ''}
+              onChange={(e) => updateConfig('query_ref', e.target.value)}
+              placeholder="例如：{{start_1.question}}"
+              className="w-full bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-sm text-slate-200"
+            />
+          </label>
         </>
       )}
 
       {data.nodeType === 'tts' && (
         <TtsNodeConfig config={config} updateConfig={updateConfig} updateConfigBatch={updateConfigBatch} />
-      )}
-
-      {data.nodeType === 'agent' && (
-        <AgentNodeConfig config={config} updateConfig={updateConfig} updateConfigBatch={updateConfigBatch} />
       )}
 
       {data.nodeType === 'if_else' && (
@@ -103,6 +118,39 @@ export function NodeConfig() {
       {data.nodeType === 'iteration' && (
         <IterationNodeConfig config={config} updateConfig={updateConfig} />
       )}
+
+      <AdditionalConfigFields
+        config={config}
+        renderedKeys={RENDERED_CONFIG_FIELDS[data.nodeType] || []}
+      />
+    </div>
+  )
+}
+
+function AdditionalConfigFields({
+  config,
+  renderedKeys,
+}: {
+  config: Record<string, unknown>
+  renderedKeys: string[]
+}) {
+  const entries = getAdditionalConfigEntries(config, renderedKeys)
+  if (entries.length === 0) return null
+
+  return (
+    <div className="mt-5 pt-4 border-t border-slate-800 space-y-3">
+      <div className="text-xs text-slate-400">其他已保存参数</div>
+      {entries.map(([key, value]) => (
+        <label key={key} className="block">
+          <span className="text-[10px] text-slate-400 block mb-1">{key}</span>
+          <textarea
+            readOnly
+            value={formatConfigValue(value)}
+            rows={typeof value === 'object' && value !== null ? 5 : 2}
+            className="w-full bg-slate-950 border border-slate-800 rounded-md px-2 py-1.5 text-xs text-slate-300 font-mono resize-none"
+          />
+        </label>
+      ))}
     </div>
   )
 }
@@ -241,7 +289,7 @@ function EndNodeConfig({
   const addOutput = () => {
     updateConfig('outputs', [
       ...outputs,
-      { name: `out_${outputs.length + 1}`, source: 'input', value: '' },
+      { name: `out_${outputs.length + 1}`, source: 'static', value: '' },
     ])
   }
 
@@ -304,7 +352,7 @@ function EndNodeConfig({
                 }
                 className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200"
               >
-                <option value="input">输入（字面量）</option>
+                <option value="static">输入（字面量）</option>
                 <option value="reference">引用</option>
               </select>
             </label>
@@ -542,12 +590,33 @@ function LlmNodeConfig({
         />
       </label>
 
+      <label className="flex items-center gap-2 mb-3">
+        <input
+          type="checkbox"
+          checked={(config.streaming as boolean | undefined) ?? true}
+          onChange={(e) => updateConfig('streaming', e.target.checked)}
+          className="rounded border-slate-600"
+        />
+        <span className="text-xs text-slate-400">流式输出</span>
+      </label>
+
       <label className="block mb-3">
         <span className="text-xs text-slate-400 block mb-1">System Prompt</span>
         <textarea
           value={(config.system_prompt as string) || ''}
           onChange={(e) => updateConfig('system_prompt', e.target.value)}
           rows={4}
+          className="w-full bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-sm text-slate-200 resize-none"
+        />
+      </label>
+
+      <label className="block mb-3">
+        <span className="text-xs text-slate-400 block mb-1">Prompt 模板</span>
+        <textarea
+          value={(config.prompt_template as string) || ''}
+          onChange={(e) => updateConfig('prompt_template', e.target.value)}
+          rows={4}
+          placeholder="例如：{{start_1.question}}"
           className="w-full bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-sm text-slate-200 resize-none"
         />
       </label>
@@ -628,6 +697,40 @@ function TtsNodeConfig({
         />
       </label>
 
+      <label className="block mb-3">
+        <span className="text-xs text-slate-400 block mb-1">文本引用</span>
+        <input
+          value={(config.text_ref as string) || ''}
+          onChange={(e) => updateConfig('text_ref', e.target.value)}
+          placeholder="例如：{{llm_1.text}}"
+          className="w-full bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-sm text-slate-200"
+        />
+      </label>
+
+      <div className="grid grid-cols-2 gap-3 mb-3">
+        <label className="block">
+          <span className="text-xs text-slate-400 block mb-1">最大分段长度</span>
+          <input
+            type="number"
+            min={1}
+            value={(config.max_chars as number) ?? 500}
+            onChange={(e) => updateConfig('max_chars', parseInt(e.target.value, 10))}
+            className="w-full bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-sm text-slate-200"
+          />
+        </label>
+        <label className="block">
+          <span className="text-xs text-slate-400 block mb-1">最大并发度</span>
+          <input
+            type="number"
+            min={1}
+            max={10}
+            value={(config.max_concurrency as number) ?? 5}
+            onChange={(e) => updateConfig('max_concurrency', parseInt(e.target.value, 10))}
+            className="w-full bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-sm text-slate-200"
+          />
+        </label>
+      </div>
+
       {isMiniMax && (
         <>
           <label className="block mb-3">
@@ -659,97 +762,6 @@ function TtsNodeConfig({
           </label>
         </>
       )}
-    </>
-  )
-}
-
-function AgentNodeConfig({
-  config,
-  updateConfig,
-  updateConfigBatch,
-}: {
-  config: Record<string, unknown>
-  updateConfig: (key: string, value: unknown) => void
-  updateConfigBatch: (patch: Record<string, unknown>) => void
-}) {
-  const providers = useProviders()
-  const providerId = config.provider_id as number | undefined
-  const { models, loading, refresh } = useProviderModels(providerId)
-
-  const handleProviderChange = (id: number | undefined) => {
-    updateConfigBatch({ provider_id: id, model: '' })
-  }
-
-  const hasModels = models.length > 0
-
-  return (
-    <>
-      <label className="block mb-3">
-        <span className="text-xs text-slate-400 block mb-1">Provider 实例</span>
-        <select
-          value={providerId != null ? String(providerId) : ''}
-          onChange={(e) => {
-            const val = e.target.value ? parseInt(e.target.value, 10) : undefined
-            handleProviderChange(val)
-          }}
-          className="w-full bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-sm text-slate-200"
-        >
-          <option value="">请选择 Provider</option>
-          {providers.map((p) => (
-            <option key={p.id} value={String(p.id)}>
-              {p.name} ({p.type})
-            </option>
-          ))}
-        </select>
-      </label>
-
-      <label className="block mb-3">
-        <span className="text-xs text-slate-400 block mb-1">模型</span>
-        <div className="flex items-center gap-2">
-          {hasModels ? (
-            <select
-              value={(config.model as string) || ''}
-              onChange={(e) => updateConfig('model', e.target.value)}
-              disabled={!providerId || loading}
-              className="flex-1 bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-sm text-slate-200 disabled:opacity-50"
-            >
-              <option value="">{loading ? '加载中...' : '请选择模型'}</option>
-              {models.map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <input
-              value={(config.model as string) || ''}
-              onChange={(e) => updateConfig('model', e.target.value)}
-              disabled={!providerId}
-              placeholder={providerId ? (loading ? '加载中...' : '无可用模型，手动输入') : '请先选择 Provider'}
-              className="flex-1 bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-sm text-slate-200 disabled:opacity-50"
-            />
-          )}
-          <button
-            type="button"
-            onClick={refresh}
-            disabled={!providerId || loading}
-            title="刷新模型列表"
-            className="px-2 py-1.5 text-sm border border-slate-600 rounded-md hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            🔄
-          </button>
-        </div>
-      </label>
-
-      <label className="block mb-3">
-        <span className="text-xs text-slate-400 block mb-1">System Prompt</span>
-        <textarea
-          value={(config.system_prompt as string) || ''}
-          onChange={(e) => updateConfig('system_prompt', e.target.value)}
-          rows={4}
-          className="w-full bg-slate-800 border border-slate-700 rounded-md px-2 py-1.5 text-sm text-slate-200 resize-none"
-        />
-      </label>
     </>
   )
 }

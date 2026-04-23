@@ -4,8 +4,6 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import inspect, text
-from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
 from backend.config import settings
@@ -13,50 +11,6 @@ from backend.database import engine, Base
 import backend.models
 
 logger = logging.getLogger(__name__)
-
-
-def _ensure_agent_session_schema(db_engine: Engine):
-    if db_engine.dialect.name != "sqlite":
-        return
-
-    inspector = inspect(db_engine)
-    if "agent_sessions" not in inspector.get_table_names():
-        return
-
-    existing_columns = {
-        column["name"] for column in inspector.get_columns("agent_sessions")
-    }
-    missing_columns = {
-        "goal": "TEXT NOT NULL DEFAULT ''",
-        "workspace_json": "TEXT NOT NULL DEFAULT '{}'",
-        "answered_dims_json": "TEXT NOT NULL DEFAULT '{}'",
-        "events_json": "TEXT NOT NULL DEFAULT '[]'",
-        "messages_json": "TEXT NOT NULL DEFAULT '[]'",
-    }
-
-    for column_name, column_def in missing_columns.items():
-        if column_name in existing_columns:
-            continue
-        with db_engine.begin() as conn:
-            conn.execute(
-                text(
-                    f"ALTER TABLE agent_sessions ADD COLUMN {column_name} {column_def}"
-                )
-            )
-        logger.info("Added missing column %s to agent_sessions", column_name)
-
-    if "workspace_json" in existing_columns or "workspace_json" in missing_columns:
-        with db_engine.begin() as conn:
-            conn.execute(
-                text(
-                    """
-                    UPDATE agent_sessions
-                    SET workspace_json = '{}'
-                    WHERE workspace_json IS NULL
-                    """
-                )
-            )
-        logger.info("Normalized empty agent_sessions.workspace_json values")
 
 
 def _ensure_secret_key():
@@ -115,7 +69,6 @@ def _seed_providers(db: Session):
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
-    _ensure_agent_session_schema(engine)
     _ensure_secret_key()
     db = Session(bind=engine)
     try:
@@ -141,11 +94,9 @@ app.mount("/audio", StaticFiles(directory=settings.audio_dir), name="audio")
 from backend.api.workflows import router as workflows_router
 from backend.api.knowledge import router as knowledge_router
 from backend.api.providers import router as providers_router
-from backend.api.harness import router as harness_router
 app.include_router(workflows_router)
 app.include_router(knowledge_router)
 app.include_router(providers_router)
-app.include_router(harness_router)
 
 
 @app.get("/api/health")

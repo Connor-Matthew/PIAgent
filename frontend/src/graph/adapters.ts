@@ -2,7 +2,7 @@
  * Graph Adapter — bidirectional conversion between WorkflowGraphV2 and React Flow.
  *
  * Responsibilities:
- * - Load a WorkflowGraphV2 (from API / Harness) into React Flow nodes/edges.
+ * - Load a WorkflowGraphV2 from the API into React Flow nodes/edges.
  * - Save React Flow state back to WorkflowGraphV2.
  * - Guarantee round-trip fidelity for structural fields:
  *   type, parentId, branchId, config, sourceHandle.

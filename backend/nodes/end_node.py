@@ -13,7 +13,7 @@ class EndNode(BaseNode):
         outputs = {}
         for out in outputs_config:
             name = out["name"]
-            source = out.get("source", "input")
+            source = out.get("source", "static")
             value = out.get("value", "")
             if source == "reference":
                 outputs[name] = resolve_reference(value, state)

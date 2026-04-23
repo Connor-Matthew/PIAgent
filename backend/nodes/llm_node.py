@@ -4,6 +4,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from backend.nodes.base import BaseNode
 from backend.core.state import WorkflowState
+from backend.core.template import render_template
 from backend.providers import build_provider
 from backend.database import SessionLocal
 from backend.models.provider import Provider
@@ -53,10 +54,15 @@ class LLMNode(BaseNode):
         if system_prompt:
             messages.append(SystemMessage(content=system_prompt))
 
-        # Include RAG context if available
-        user_content = state.get("input", "")
-        if state.get("context"):
-            user_content = f"Reference context:\n{state['context']}\n\nUser input:\n{user_content}"
+        # Build user content: prefer prompt_template, fallback to legacy behavior
+        prompt_template = self.config.get("prompt_template", "")
+        if prompt_template:
+            user_content = render_template(prompt_template, state)
+        else:
+            # Legacy fallback
+            user_content = state.get("input", "")
+            if state.get("context"):
+                user_content = f"Reference context:\n{state['context']}\n\nUser input:\n{user_content}"
 
         messages.append(HumanMessage(content=user_content))
 

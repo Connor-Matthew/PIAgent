@@ -1,5 +1,6 @@
 from backend.nodes.base import BaseNode
 from backend.core.state import WorkflowState
+from backend.core.template import resolve_reference
 from backend.rag.vectorstore import get_vectorstore
 
 
@@ -13,10 +14,17 @@ class RAGNode(BaseNode):
         return vectorstore.as_retriever(search_kwargs={"k": top_k})
 
     async def execute(self, state: WorkflowState, **kwargs) -> WorkflowState:
-        query = state.get("input", "")
+        # Prefer explicit query_ref, fallback to legacy state["input"]
+        query_ref = self.config.get("query_ref", "")
+        if query_ref:
+            query = resolve_reference(query_ref, state)
+            if not query:
+                query = ""
+        else:
+            query = state.get("input", "")
+
         retriever = self._get_retriever()
         on_event = kwargs.get("on_event")
-        # run_context = kwargs.get("run_context")  # reserved for future use
 
         async with self.heartbeat(on_event, message="检索知识库中..."):
             docs = await retriever.ainvoke(query)

@@ -36,10 +36,9 @@ function createDefaultGraph(): WorkflowGraph {
 }
 
 function WorkflowEditor() {
-  const { workflowId, isDraft, setWorkflow } = useWorkflowStore()
+  const { workflowId, setWorkflow } = useWorkflowStore()
   // Load workflows on mount and auto-create one if needed
   useEffect(() => {
-    if (isDraft) return
     workflowApi.list().then((list) => {
       if (list.length > 0 && !workflowId) {
         const first = list[0]
@@ -51,10 +50,10 @@ function WorkflowEditor() {
           .create({ name: '未命名工作流', graph: createDefaultGraph() })
           .then((wf) => {
             setWorkflow(wf.id, wf.name, wf.graph.nodes, wf.graph.edges)
-          })
+        })
       }
     })
-  }, [isDraft, setWorkflow, workflowId])
+  }, [setWorkflow, workflowId])
 
   return (
     <>
@@ -73,7 +72,7 @@ function AppContent() {
   const isWorkflow = location.pathname === '/'
   const isProviders = location.pathname === '/providers'
 
-  const { workflowId, workflowName, isDraft, toGraphJSON, setWorkflow } = useWorkflowStore()
+  const { workflowId, workflowName, toGraphJSON, setWorkflow } = useWorkflowStore()
   const debugReset = useDebugStore((s) => s.reset)
   const [isSaving, setIsSaving] = useState(false)
 
@@ -104,7 +103,7 @@ function AppContent() {
           <Link to="/" className="text-blue-400 font-bold text-lg hover:text-blue-300">
             PIAgent
           </Link>
-          <span className="text-slate-500 text-sm hidden sm:inline">AI Agent 工作流编排平台</span>
+          <span className="text-slate-500 text-sm hidden sm:inline">可视化工作流编排平台</span>
           <nav className="flex items-center gap-2 ml-4 border-l border-slate-700 pl-4">
             <Link
               to="/"
@@ -132,11 +131,6 @@ function AppContent() {
           {isWorkflow && (
             <>
               <span className="text-slate-400 text-sm">{workflowName}</span>
-              {isDraft && (
-                <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[11px] text-amber-200">
-                  Agent Draft
-                </span>
-              )}
               <button
                 onClick={createNewWorkflow}
                 className="bg-slate-800 text-white text-xs px-3 py-1.5 rounded-md hover:bg-slate-700"
@@ -145,10 +139,10 @@ function AppContent() {
               </button>
               <button
                 onClick={handleSave}
-                disabled={isSaving || !workflowId || isDraft}
+                disabled={isSaving || !workflowId}
                 className="bg-slate-700 text-white text-xs px-3 py-1.5 rounded-md hover:bg-slate-600 disabled:opacity-50"
               >
-                {isDraft ? '先 Apply' : isSaving ? '保存中...' : '💾 保存'}
+                {isSaving ? '保存中...' : '💾 保存'}
               </button>
             </>
           )}

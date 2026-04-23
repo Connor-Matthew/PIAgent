@@ -9,12 +9,11 @@ from backend.nodes.end_node import EndNode
 from backend.nodes.llm_node import LLMNode
 from backend.nodes.tts_node import TTSNode
 from backend.nodes.rag_node import RAGNode
-from backend.nodes.agent_node import AgentNode
 from backend.nodes.if_else_node import IfElseNode
 from backend.nodes.iteration_node import IterationNode
 
 # Register built-in nodes
-for node_cls in (StartNode, EndNode, LLMNode, TTSNode, RAGNode, AgentNode, IfElseNode, IterationNode):
+for node_cls in (StartNode, EndNode, LLMNode, TTSNode, RAGNode, IfElseNode, IterationNode):
     try:
         node_registry.register(node_cls)
     except KeyError:

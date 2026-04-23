@@ -2,14 +2,13 @@ import os
 import tempfile
 from unittest.mock import patch
 
-from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import Session
 
 from backend.main import (
-    _ensure_agent_session_schema,
     _ensure_secret_key,
     _seed_providers,
 )
+from backend.database import Base
 from backend.models.provider import Provider
 
 
@@ -72,39 +71,11 @@ def test_seed_providers_skips_when_existing(db: Session):
     assert len(providers) == 1
 
 
-def test_ensure_agent_session_schema_backfills_legacy_sqlite_columns():
-    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-        db_path = f.name
+def test_harness_api_is_removed(client):
+    resp = client.post("/api/harness/sessions", json={"goal": "Build a workflow"})
+    assert resp.status_code == 404
 
-    engine = create_engine(f"sqlite:///{db_path}")
-    try:
-        with engine.begin() as conn:
-            conn.execute(
-                text(
-                    """
-                    CREATE TABLE agent_sessions (
-                        id VARCHAR NOT NULL PRIMARY KEY,
-                        user_goal TEXT NOT NULL,
-                        status VARCHAR(32) NOT NULL,
-                        turns_json TEXT NOT NULL,
-                        recipe_json TEXT,
-                        graph_json TEXT,
-                        rationale_text TEXT,
-                        workflow_id VARCHAR,
-                        created_at DATETIME,
-                        updated_at DATETIME
-                    )
-                    """
-                )
-            )
 
-        _ensure_agent_session_schema(engine)
-
-        column_names = {
-            column["name"] for column in inspect(engine).get_columns("agent_sessions")
-        }
-        assert "answered_dims_json" in column_names
-        assert "events_json" in column_names
-    finally:
-        engine.dispose()
-        os.unlink(db_path)
+def test_agent_session_model_is_removed_from_metadata():
+    assert "agent_sessions" not in Base.metadata.tables
+    assert "project_preferences" not in Base.metadata.tables

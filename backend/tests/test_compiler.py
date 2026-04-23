@@ -84,6 +84,23 @@ def test_compiler_compile_returns_compiled_workflow():
     assert compiled.top_level_order == ["start_1", "end_1"]
 
 
+def test_compiler_rejects_runtime_agent_node_type():
+    graph_json = make_graph_json(
+        nodes=[
+            {"id": "start_1", "type": "start", "data": {}},
+            {"id": "agent_1", "type": "agent", "data": {}},
+            {"id": "end_1", "type": "end", "data": {}},
+        ],
+        edges=[
+            {"source": "start_1", "target": "agent_1"},
+            {"source": "agent_1", "target": "end_1"},
+        ],
+    )
+    compiler = GraphCompiler()
+    with pytest.raises(ValueError, match="Unknown node type: agent"):
+        compiler.validate(graph_json)
+
+
 def test_compiler_dangling_edge_reference_raises():
     graph_json = make_graph_json(
         nodes=[

@@ -1,5 +1,6 @@
 from backend.nodes.base import BaseNode
 from backend.core.state import WorkflowState
+from backend.core.template import resolve_reference
 from backend.tts import TTS_PROVIDER_REGISTRY, build_tts_provider
 from backend.tts.parallel import synthesize_long_text
 from backend.database import SessionLocal
@@ -32,7 +33,14 @@ class TTSNode(BaseNode):
         return self._get_tts_provider_legacy(provider_id)
 
     async def execute(self, state: WorkflowState, **kwargs) -> WorkflowState:
-        text = state.get("llm_output") or state.get("input", "")
+        # Prefer explicit text_ref, fallback to legacy state["llm_output"] / state["input"]
+        text_ref = self.config.get("text_ref", "")
+        if text_ref:
+            text = resolve_reference(text_ref, state)
+            if not text:
+                text = ""
+        else:
+            text = state.get("llm_output") or state.get("input", "")
         on_event = kwargs.get("on_event")
 
         provider = self._get_tts_provider(kwargs.get("run_context"))

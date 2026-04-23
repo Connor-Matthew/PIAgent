@@ -115,7 +115,7 @@ async def test_end_node_with_outputs_and_answer():
     node = EndNode(config={
         "outputs": [
             {"name": "audio_url", "source": "reference", "value": "{{tts_1.audio_url}}"},
-            {"name": "title", "source": "input", "value": "今天的 AI 播客"},
+            {"name": "title", "source": "static", "value": "今天的 AI 播客"},
         ],
         "answer": "🎧 {{title}} 已生成，链接：{{audio_url}}",
     })
@@ -302,30 +302,6 @@ async def test_llm_node_emits_stream_events():
     assert result["node_outputs"]["llm_1"]["text"] == "你好，世界"
 
 
-def test_agent_node_missing_provider_id_raises():
-    from backend.nodes.agent_node import AgentNode
-
-    node = AgentNode(config={})
-    with pytest.raises(ValueError, match="provider_id is required"):
-        node._build_agent()
-
-
-def test_agent_node_unknown_tool_raises():
-    from backend.nodes.agent_node import AgentNode
-
-    mock_row = MagicMock()
-    mock_row.enabled = True
-    mock_session = MagicMock()
-    mock_session.query.return_value.filter.return_value.first.return_value = mock_row
-
-    with patch("backend.nodes.agent_node.SessionLocal", return_value=mock_session):
-        with patch("backend.nodes.agent_node.build_provider") as mock_build:
-            mock_build.return_value = MagicMock()
-            node = AgentNode(config={"provider_id": 1, "tools": ["unknown_tool"]})
-            with pytest.raises(ValueError, match="Unknown tool"):
-                node._build_agent()
-
-
 def test_llm_node_missing_provider_id_raises():
     from backend.nodes.llm_node import LLMNode
 
@@ -453,28 +429,169 @@ async def test_rag_node_clears_context_when_no_docs():
         assert len(result["node_outputs"]["rag"]["documents"]) == 0
 
 
+# ── New Phase 2 tests: explicit input refs ──
+
+
 @pytest.mark.asyncio
-async def test_agent_node_executes():
-    from backend.nodes.agent_node import AgentNode
+async def test_llm_node_uses_prompt_template():
+    from backend.nodes.llm_node import LLMNode
 
-    with patch("backend.nodes.agent_node.AgentNode._build_agent") as mock_build:
-        mock_agent = AsyncMock()
-        mock_agent.ainvoke.return_value = {
-            "messages": [MagicMock(content="Agent completed the task. Here's the podcast script.")]
-        }
-        mock_build.return_value = mock_agent
+    mock_response = MagicMock()
+    mock_response.content = "Rendered template result."
 
-        node = AgentNode(config={
+    with patch("backend.nodes.llm_node.LLMNode._get_chat_model") as mock_get:
+        mock_model = AsyncMock()
+        mock_model.ainvoke.return_value = mock_response
+        mock_get.return_value = mock_model
+
+        node = LLMNode(config={
             "provider_id": 1,
-            "model": "gpt-4o",
-            "system_prompt": "You are a helpful agent.",
-            "tools": ["rag", "tts"],
+            "prompt_template": "Question: {{start_1.question}}",
         })
         state: WorkflowState = {
-            "input": "Make a podcast about AI", "messages": [], "context": "",
+            "input": "ignored",
+            "messages": [],
+            "context": "",
+            "llm_output": "",
+            "audio_url": "",
+            "node_outputs": {
+                "start_1": {"question": "What is AI?"},
+            },
+        }
+        result = await node.execute(state)
+        assert result["llm_output"] == "Rendered template result."
+        # Verify the user message used the template
+        user_message = result["messages"][0]
+        assert "Question: What is AI?" in user_message.content
+
+
+@pytest.mark.asyncio
+async def test_llm_node_prompt_template_fallback_to_legacy():
+    from backend.nodes.llm_node import LLMNode
+
+    mock_response = MagicMock()
+    mock_response.content = "Legacy fallback."
+
+    with patch("backend.nodes.llm_node.LLMNode._get_chat_model") as mock_get:
+        mock_model = AsyncMock()
+        mock_model.ainvoke.return_value = mock_response
+        mock_get.return_value = mock_model
+
+        node = LLMNode(config={"provider_id": 1})
+        state: WorkflowState = {
+            "input": "Legacy input",
+            "messages": [],
+            "context": "",
+            "llm_output": "",
+            "audio_url": "",
+            "node_outputs": {},
+        }
+        result = await node.execute(state)
+        assert result["llm_output"] == "Legacy fallback."
+        user_message = result["messages"][0]
+        assert user_message.content == "Legacy input"
+
+
+@pytest.mark.asyncio
+async def test_rag_node_uses_query_ref():
+    from backend.nodes.rag_node import RAGNode
+
+    with patch("backend.nodes.rag_node.RAGNode._get_retriever") as mock_get:
+        from langchain_core.documents import Document
+        mock_retriever = AsyncMock()
+        mock_retriever.ainvoke.return_value = [
+            Document(page_content="Query ref result."),
+        ]
+        mock_get.return_value = mock_retriever
+
+        node = RAGNode(config={
+            "knowledge_base_id": "kb1",
+            "top_k": 3,
+            "query_ref": "{{start_1.question}}",
+        })
+        state: WorkflowState = {
+            "input": "ignored input",
+            "messages": [], "context": "",
+            "llm_output": "", "audio_url": "", "node_outputs": {
+                "start_1": {"question": "What is RAG?"},
+            },
+        }
+        result = await node.execute(state)
+        assert "Query ref result." in result["context"]
+        # Verify retriever was called with the resolved ref
+        call_args = mock_retriever.ainvoke.await_args[0]
+        assert call_args[0] == "What is RAG?"
+
+
+@pytest.mark.asyncio
+async def test_rag_node_query_ref_fallback_to_legacy():
+    from backend.nodes.rag_node import RAGNode
+
+    with patch("backend.nodes.rag_node.RAGNode._get_retriever") as mock_get:
+        from langchain_core.documents import Document
+        mock_retriever = AsyncMock()
+        mock_retriever.ainvoke.return_value = [
+            Document(page_content="Legacy query result."),
+        ]
+        mock_get.return_value = mock_retriever
+
+        node = RAGNode(config={"knowledge_base_id": "kb1", "top_k": 3})
+        state: WorkflowState = {
+            "input": "Legacy query",
+            "messages": [], "context": "",
             "llm_output": "", "audio_url": "", "node_outputs": {},
         }
         result = await node.execute(state)
-        assert result["llm_output"] == "Agent completed the task. Here's the podcast script."
-        assert result["node_outputs"]["agent"]["text"] == "Agent completed the task. Here's the podcast script."
-        assert result["node_outputs"]["agent"]["steps"] == []
+        assert "Legacy query result." in result["context"]
+        call_args = mock_retriever.ainvoke.await_args[0]
+        assert call_args[0] == "Legacy query"
+
+
+@pytest.mark.asyncio
+async def test_tts_node_uses_text_ref():
+    from backend.nodes.tts_node import TTSNode
+
+    with patch("backend.nodes.tts_node.TTSNode._get_tts_provider") as mock_get:
+        mock_provider = AsyncMock()
+        mock_provider.synthesize.return_value = "/audio/ref.mp3"
+        mock_get.return_value = mock_provider
+
+        node = TTSNode(config={
+            "provider_id": 1,
+            "voice_id": "default",
+            "text_ref": "{{llm_1.text}}",
+        })
+        state: WorkflowState = {
+            "input": "ignored",
+            "messages": [], "context": "",
+            "llm_output": "also ignored",
+            "audio_url": "", "node_outputs": {
+                "llm_1": {"text": "Text from ref"},
+            },
+        }
+        result = await node.execute(state)
+        assert result["audio_url"] == "/audio/ref.mp3"
+        call_kwargs = mock_provider.synthesize.await_args.kwargs
+        assert call_kwargs["text"] == "Text from ref"
+
+
+@pytest.mark.asyncio
+async def test_tts_node_text_ref_fallback_to_legacy():
+    from backend.nodes.tts_node import TTSNode
+
+    with patch("backend.nodes.tts_node.TTSNode._get_tts_provider") as mock_get:
+        mock_provider = AsyncMock()
+        mock_provider.synthesize.return_value = "/audio/legacy.mp3"
+        mock_get.return_value = mock_provider
+
+        node = TTSNode(config={"provider_id": 1, "voice_id": "default"})
+        state: WorkflowState = {
+            "input": "Fallback input",
+            "messages": [], "context": "",
+            "llm_output": "",
+            "audio_url": "", "node_outputs": {},
+        }
+        result = await node.execute(state)
+        assert result["audio_url"] == "/audio/legacy.mp3"
+        call_kwargs = mock_provider.synthesize.await_args.kwargs
+        assert call_kwargs["text"] == "Fallback input"

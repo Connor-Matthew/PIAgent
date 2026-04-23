@@ -9,7 +9,6 @@ export type NodeType =
   | 'start'
   | 'llm'
   | 'rag'
-  | 'agent'
   | 'tts'
   | 'end'
   | 'if_else'

@@ -1,4 +1,4 @@
-"""Pure-function graph structural rules shared between harness validators and engine compiler."""
+"""Pure-function graph structural rules used by the engine compiler."""
 
 from __future__ import annotations
 

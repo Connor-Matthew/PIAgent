@@ -30,8 +30,6 @@ interface WorkflowState {
   selectedNodeId: string | null
   workflowId: string | null
   workflowName: string
-  isDraft: boolean
-  isHarnessLocked: boolean
 
   onNodesChange: OnNodesChange
   onEdgesChange: OnEdgesChange
@@ -39,16 +37,11 @@ interface WorkflowState {
   addNode: (node: WorkflowNodeInput) => void
   addChildNode: (parentId: string, nodeType: NodeType, position: { x: number; y: number }) => void
   addGraphEdge: (edge: WorkflowEdgeInput) => void
-  startDraftBuild: (name: string) => void
   setSelectedNode: (id: string | null) => void
   updateNodeData: (id: string, data: Partial<WorkflowNodeData>) => void
   patchNodeConfig: (id: string, patch: Record<string, unknown>) => void
-  setAllNodeVisuals: (patch: Pick<WorkflowNodeData, 'visualState' | 'visualLabel' | 'statusNote'> | Partial<Pick<WorkflowNodeData, 'visualState' | 'visualLabel' | 'statusNote'>>) => void
   setWorkflow: (id: string, name: string, nodes: WorkflowNodeInput[], edges: WorkflowEdgeInput[]) => void
-  setDraftSnapshot: (name: string, nodes: WorkflowNodeInput[], edges: WorkflowEdgeInput[]) => void
-  setDraftWorkflow: (name: string, nodes: WorkflowNodeInput[], edges: WorkflowEdgeInput[]) => void
   deleteEdge: (edgeId: string) => void
-  setHarnessLocked: (locked: boolean) => void
   toGraphJSON: () => WorkflowGraph
 }
 
@@ -89,9 +82,10 @@ function isNodeType(value: unknown): value is NodeType {
     value === 'start' ||
     value === 'llm' ||
     value === 'rag' ||
-    value === 'agent' ||
     value === 'tts' ||
-    value === 'end'
+    value === 'end' ||
+    value === 'if_else' ||
+    value === 'iteration'
   )
 }
 
@@ -197,11 +191,8 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   selectedNodeId: null,
   workflowId: null,
   workflowName: 'Untitled Workflow',
-  isDraft: false,
-  isHarnessLocked: false,
 
   onNodesChange: (changes) => {
-    if (get().isHarnessLocked) return
     const lockedIds = new Set(get().nodes.filter((n) => n.data.locked).map((n) => n.id))
 
     // Collect IDs being removed
@@ -234,12 +225,10 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   },
 
   onEdgesChange: (changes) => {
-    if (get().isHarnessLocked) return
     set({ edges: applyEdgeChanges(changes, get().edges) })
   },
 
   onConnect: (connection) => {
-    if (get().isHarnessLocked) return
     set({ edges: addEdgeToState(connection, get().edges) })
   },
 
@@ -291,16 +280,6 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
       return { edges: [...state.edges, normalized] }
     }),
 
-  startDraftBuild: (name) =>
-    set({
-      workflowId: null,
-      workflowName: name,
-      nodes: [],
-      edges: [],
-      isDraft: true,
-      selectedNodeId: null,
-    }),
-
   setSelectedNode: (id) =>
     set({ selectedNodeId: id }),
 
@@ -329,56 +308,20 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
       ),
     }),
 
-  setAllNodeVisuals: (patch) =>
-    set({
-      nodes: get().nodes.map((n) => ({
-        ...n,
-        data: {
-          ...n.data,
-          ...patch,
-        },
-      })),
-    }),
-
   setWorkflow: (id, name, graphNodes, edges) => {
-    const graph = loadGraph({ nodes: graphNodes, edges })
+    const graph = loadGraph({ version: 2, nodes: graphNodes, edges })
     const converted = graphToReactFlow(graph)
     set({
       workflowId: id,
       workflowName: name,
       nodes: normalizeGraphNodes(converted.nodes),
       edges: normalizeGraphEdges(converted.edges),
-      isDraft: false,
+      selectedNodeId:
+        get().selectedNodeId && converted.nodes.some((n) => n.id === get().selectedNodeId)
+          ? get().selectedNodeId
+          : null,
     })
   },
-
-  setDraftSnapshot: (name, graphNodes, edges) => {
-    const graph = loadGraph({ nodes: graphNodes, edges })
-    const converted = graphToReactFlow(graph)
-    set({
-      workflowId: null,
-      workflowName: name,
-      nodes: normalizeGraphNodes(converted.nodes),
-      edges: normalizeGraphEdges(converted.edges),
-      isDraft: true,
-      selectedNodeId: null,
-    })
-  },
-
-  setDraftWorkflow: (name, graphNodes, edges) => {
-    const graph = loadGraph({ nodes: graphNodes, edges })
-    const converted = graphToReactFlow(graph)
-    set({
-      workflowId: null,
-      workflowName: name,
-      nodes: normalizeGraphNodes(converted.nodes),
-      edges: normalizeGraphEdges(converted.edges),
-      isDraft: true,
-      selectedNodeId: null,
-    })
-  },
-
-  setHarnessLocked: (locked) => set({ isHarnessLocked: locked }),
 
   toGraphJSON: () => {
     const { nodes, edges } = get()
