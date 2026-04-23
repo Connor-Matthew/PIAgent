@@ -1,4 +1,10 @@
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import type { NodeType } from '../../types/workflow'
+import { type WorkflowMeta, useWorkflowStore } from '../../stores/workflowStore'
+import { workflowApi } from '../../services/api'
+import { getApiErrorMessage } from '../../utils/apiErrors'
+import { WorkflowDeleteDialog } from './WorkflowDeleteDialog'
 
 const NODE_GROUPS = [
   {
@@ -31,9 +37,53 @@ const NODE_GROUPS = [
 ]
 
 export function NodeLibrary() {
+  const navigate = useNavigate()
+  const workflows = useWorkflowStore((s) => s.workflows)
+  const workflowId = useWorkflowStore((s) => s.workflowId)
+  const openTab = useWorkflowStore((s) => s.openTab)
+  const removeWorkflowMeta = useWorkflowStore((s) => s.removeWorkflowMeta)
+  const closeTab = useWorkflowStore((s) => s.closeTab)
+  const [pendingDelete, setPendingDelete] = useState<WorkflowMeta | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+
   const onDragStart = (event: React.DragEvent, nodeType: NodeType) => {
     event.dataTransfer.setData('application/piagent-node', nodeType)
     event.dataTransfer.effectAllowed = 'move'
+  }
+
+  const handleOpenWorkflow = (id: string) => {
+    openTab(id)
+    navigate(`/workflow/${id}`)
+  }
+
+  const handleRequestDelete = (e: React.MouseEvent, id: string, name: string) => {
+    e.stopPropagation()
+    setDeleteError(null)
+    setPendingDelete({ id, name })
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!pendingDelete) return
+    const target = pendingDelete
+    setIsDeleting(true)
+    try {
+      await workflowApi.delete(target.id)
+      setPendingDelete(null)
+    } catch (error) {
+      setPendingDelete(null)
+      setDeleteError(getApiErrorMessage(error, '删除失败，请稍后重试。'))
+      return
+    } finally {
+      setIsDeleting(false)
+    }
+
+    const fallback = closeTab(target.id)
+    removeWorkflowMeta(target.id)
+    if (workflowId === target.id) {
+      if (fallback) navigate(`/workflow/${fallback}`)
+      else navigate('/')
+    }
   }
 
   return (
@@ -57,6 +107,54 @@ export function NodeLibrary() {
           ))}
         </div>
       ))}
+
+      <div className="mt-2 pt-4 border-t border-gray-200">
+        <div className="text-xs text-gray-400 uppercase tracking-wider mb-2">我的工作流</div>
+        {workflows.length === 0 ? (
+          <div className="text-xs text-gray-400 px-1">暂无工作流</div>
+        ) : (
+          workflows.map((wf) => {
+            const active = wf.id === workflowId
+            return (
+              <div
+                key={wf.id}
+                onClick={() => handleOpenWorkflow(wf.id)}
+                className={`group flex items-center justify-between gap-1 px-2 py-1.5 mb-0.5 cursor-pointer text-sm ${
+                  active ? 'bg-gray-100 text-black' : 'text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                <span className="truncate flex-1" title={wf.name}>{wf.name}</span>
+                <button
+                  onClick={(e) => handleRequestDelete(e, wf.id, wf.name)}
+                  className="opacity-0 group-hover:opacity-60 hover:!opacity-100 hover:text-red-500 text-xs w-4 h-4 flex items-center justify-center shrink-0"
+                  aria-label="删除工作流"
+                  title="删除"
+                >
+                  ×
+                </button>
+              </div>
+            )
+          })
+        )}
+      </div>
+
+      {pendingDelete && (
+        <WorkflowDeleteDialog
+          mode="confirm"
+          workflowName={pendingDelete.name}
+          isDeleting={isDeleting}
+          onCancel={() => setPendingDelete(null)}
+          onConfirm={handleConfirmDelete}
+        />
+      )}
+
+      {deleteError && (
+        <WorkflowDeleteDialog
+          mode="error"
+          errorMessage={deleteError}
+          onClose={() => setDeleteError(null)}
+        />
+      )}
     </div>
   )
 }

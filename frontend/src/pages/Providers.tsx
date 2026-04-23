@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { providerApi } from '../services/api'
 import type { Provider, ProviderCreate, ProviderTypeInfo, ProviderUpdate } from '../types/provider'
 import { getApiErrorMessage, getApiErrorStatus } from '../utils/apiErrors'
+import { AppNoticeDialog } from '../components/ui/AppNoticeDialog'
 
 interface ProviderFormState {
   category: 'llm' | 'tts'
@@ -11,6 +12,11 @@ interface ProviderFormState {
   base_url: string
   enabled: boolean
   selected_models: string[]
+}
+
+interface ProviderNoticeState {
+  title: string
+  message: string
 }
 
 export default function ProvidersPage() {
@@ -31,10 +37,12 @@ export default function ProvidersPage() {
   })
   const [formError, setFormError] = useState<string | null>(null)
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null)
+  const [notice, setNotice] = useState<ProviderNoticeState | null>(null)
   const [testStatus, setTestStatus] = useState<{ msg: string; ok: boolean } | null>(null)
   const [modelsLoading, setModelsLoading] = useState(false)
   const [cachedModels, setCachedModels] = useState<string[] | null>(null)
   const [cachedAt, setCachedAt] = useState<string | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   const fetchProviders = async () => {
     setLoading(true)
@@ -187,7 +195,10 @@ export default function ProvidersPage() {
       await providerApi.update(p.id, { enabled: !p.enabled })
       await fetchProviders()
     } catch (error: unknown) {
-      alert(getApiErrorMessage(error, '更新 Provider 状态失败'))
+      setNotice({
+        title: '更新失败',
+        message: getApiErrorMessage(error, '更新 Provider 状态失败'),
+      })
     }
   }
 
@@ -218,15 +229,21 @@ export default function ProvidersPage() {
 
   const handleDelete = async () => {
     if (confirmDeleteId === null) return
+    setIsDeleting(true)
     try {
       await providerApi.delete(confirmDeleteId)
       setConfirmDeleteId(null)
       await fetchProviders()
     } catch (error: unknown) {
-      alert(getApiErrorMessage(error, '删除 Provider 失败'))
+      setNotice({
+        title: '删除失败',
+        message: getApiErrorMessage(error, '删除 Provider 失败'),
+      })
       if (getApiErrorStatus(error) !== 409) {
         setConfirmDeleteId(null)
       }
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -626,7 +643,7 @@ export default function ProvidersPage() {
       )}
 
       {/* Delete Confirm */}
-      {confirmDeleteId !== null && (
+      {confirmDeleteId !== null && notice === null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
         >
           <div className="bg-white border border-black w-full max-w-sm p-5"
@@ -641,19 +658,29 @@ export default function ProvidersPage() {
             >
               <button
                 onClick={() => setConfirmDeleteId(null)}
+                disabled={isDeleting}
                 className="px-4 py-2 text-sm bg-gray-100 text-gray-700 hover:bg-gray-200"
               >
                 取消
               </button>
               <button
                 onClick={handleDelete}
-                className="px-4 py-2 text-sm bg-red-600 text-white hover:bg-red-700"
+                disabled={isDeleting}
+                className="px-4 py-2 text-sm bg-red-600 text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                删除
+                {isDeleting ? '删除中...' : '删除'}
               </button>
             </div>
           </div>
         </div>
+      )}
+
+      {notice && (
+        <AppNoticeDialog
+          title={notice.title}
+          message={notice.message}
+          onClose={() => setNotice(null)}
+        />
       )}
     </div>
   )

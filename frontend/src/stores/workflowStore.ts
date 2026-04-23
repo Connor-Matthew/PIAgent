@@ -24,12 +24,49 @@ type WorkflowEdgeInput =
   | Edge
   | (WorkflowGraphEdge & Partial<Pick<Edge, 'type' | 'animated' | 'label' | 'markerEnd'>>)
 
+export interface WorkflowMeta {
+  id: string
+  name: string
+}
+
+export type SaveStatus = 'idle' | 'dirty' | 'saving' | 'saved' | 'error'
+
+const OPEN_TABS_KEY = 'piagent:openTabs'
+
+function loadOpenTabIds(): string[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const raw = window.localStorage.getItem(OPEN_TABS_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    if (Array.isArray(parsed) && parsed.every((x) => typeof x === 'string')) {
+      return parsed
+    }
+  } catch {
+    // ignore
+  }
+  return []
+}
+
+function persistOpenTabIds(ids: string[]): void {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(OPEN_TABS_KEY, JSON.stringify(ids))
+  } catch {
+    // ignore
+  }
+}
+
 interface WorkflowState {
   nodes: Node<WorkflowNodeData>[]
   edges: Edge[]
   selectedNodeId: string | null
   workflowId: string | null
   workflowName: string
+
+  workflows: WorkflowMeta[]
+  openTabIds: string[]
+  saveStatus: SaveStatus
 
   onNodesChange: OnNodesChange
   onEdgesChange: OnEdgesChange
@@ -44,6 +81,38 @@ interface WorkflowState {
   deleteEdge: (edgeId: string) => void
   deleteNode: (nodeId: string) => void
   toGraphJSON: () => WorkflowGraph
+
+  setWorkflows: (workflows: WorkflowMeta[]) => void
+  upsertWorkflowMeta: (meta: WorkflowMeta) => void
+  removeWorkflowMeta: (id: string) => void
+  openTab: (id: string) => void
+  closeTab: (id: string) => string | null
+  setSaveStatus: (status: SaveStatus) => void
+}
+
+export function createDefaultGraph(): WorkflowGraph {
+  return {
+    version: 2,
+    nodes: [
+      {
+        id: 'start_1',
+        type: 'start',
+        position: { x: 80, y: 240 },
+        label: '用户输入',
+        locked: true,
+        config: { inputs: [] },
+      },
+      {
+        id: 'end_1',
+        type: 'end',
+        position: { x: 720, y: 240 },
+        label: '结束',
+        locked: true,
+        config: { outputs: [], answer: '' },
+      },
+    ],
+    edges: [],
+  }
 }
 
 export const defaultStartNode: Node<WorkflowNodeData> = {
@@ -193,6 +262,10 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   workflowId: null,
   workflowName: 'Untitled Workflow',
 
+  workflows: [],
+  openTabIds: loadOpenTabIds(),
+  saveStatus: 'idle',
+
   onNodesChange: (changes) => {
     const lockedIds = new Set(get().nodes.filter((n) => n.data.locked).map((n) => n.id))
 
@@ -334,4 +407,56 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     const { nodes, edges } = get()
     return reactFlowToGraph(nodes, edges)
   },
+
+  setWorkflows: (workflows) => {
+    const validIds = new Set(workflows.map((w) => w.id))
+    const openTabIds = get().openTabIds.filter((id) => validIds.has(id))
+    persistOpenTabIds(openTabIds)
+    set({ workflows, openTabIds })
+  },
+
+  upsertWorkflowMeta: (meta) =>
+    set((state) => {
+      const idx = state.workflows.findIndex((w) => w.id === meta.id)
+      if (idx === -1) {
+        return { workflows: [...state.workflows, meta] }
+      }
+      const next = state.workflows.slice()
+      next[idx] = meta
+      return { workflows: next }
+    }),
+
+  removeWorkflowMeta: (id) =>
+    set((state) => {
+      const workflows = state.workflows.filter((w) => w.id !== id)
+      const openTabIds = state.openTabIds.filter((tid) => tid !== id)
+      persistOpenTabIds(openTabIds)
+      return { workflows, openTabIds }
+    }),
+
+  openTab: (id) =>
+    set((state) => {
+      if (state.openTabIds.includes(id)) return state
+      const openTabIds = [...state.openTabIds, id]
+      persistOpenTabIds(openTabIds)
+      return { openTabIds }
+    }),
+
+  closeTab: (id) => {
+    const { openTabIds, workflowId } = get()
+    if (!openTabIds.includes(id)) return workflowId
+    const nextTabs = openTabIds.filter((tid) => tid !== id)
+    persistOpenTabIds(nextTabs)
+
+    let fallback: string | null = workflowId
+    if (workflowId === id) {
+      const idx = openTabIds.indexOf(id)
+      fallback = nextTabs[idx] ?? nextTabs[idx - 1] ?? nextTabs[nextTabs.length - 1] ?? null
+    }
+
+    set({ openTabIds: nextTabs })
+    return fallback
+  },
+
+  setSaveStatus: (status) => set({ saveStatus: status }),
 }))
