@@ -11,6 +11,7 @@ from starlette.concurrency import run_in_threadpool
 from backend.database import get_db
 from backend.models.workflow import Workflow
 from backend.models.run import WorkflowRun
+from backend.models.run_event import WorkflowRunEvent
 from backend.core.engine import ExecutionEngine
 from backend.core.compiler import GraphCompiler, CompilerError, CycleDetectedError
 from backend.core.graph_schema import dump_graph, load_graph
@@ -278,8 +279,20 @@ async def stream_run_events(
 
     async def event_generator():
         queue: asyncio.Queue = asyncio.Queue()
+        event_seq = 0
 
         async def on_event(event):
+            nonlocal event_seq
+            event_seq += 1
+            event_row = WorkflowRunEvent(
+                workflow_id=workflow_id,
+                run_id=run_id,
+                seq=event_seq,
+                event_type=event.get("type", "unknown"),
+            )
+            event_row.event = event
+            await run_in_threadpool(lambda: db.add(event_row))
+            await run_in_threadpool(lambda: db.commit())
             await queue.put(event)
             await asyncio.sleep(0)
 

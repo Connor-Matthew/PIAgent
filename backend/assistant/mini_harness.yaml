@@ -1,0 +1,38 @@
+config_version: 1
+log_level: info
+
+models:
+  - name: default
+    display_name: Workflow Assistant
+    model: gpt-4o-mini
+    api_key: ${OPENAI_API_KEY}
+    base_url: ${OPENAI_BASE_URL:-}
+    temperature: 0.2
+    timeout: 120.0
+
+tools: []
+
+sandbox:
+  use: mini_harness.sandbox.local:LocalSandboxProvider
+  work_dir: ./workspace
+  allow_bash: false
+
+skills:
+  enabled: false
+  directory: backend/assistant/skills
+
+token_usage:
+  enabled: true
+
+loop_detection:
+  enabled: true
+  warn_threshold: 3
+  hard_limit: 5
+
+clarification:
+  enabled: false
+
+summarization:
+  enabled: false
+  trigger_messages: 30
+  keep_messages: 10
