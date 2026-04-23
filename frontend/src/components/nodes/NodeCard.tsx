@@ -18,40 +18,40 @@ interface NodeCardProps {
 
 const ACCENT_STYLES = {
   blue: {
-    border: 'border-blue-500',
-    selectedBorder: 'border-blue-300',
-    iconBg: 'bg-blue-500',
-    handle: '!bg-blue-500',
+    border: 'border-gray-800',
+    selectedBorder: 'border-black',
+    iconBg: 'bg-gray-800',
+    handle: '!bg-gray-800',
   },
   purple: {
-    border: 'border-purple-500',
-    selectedBorder: 'border-purple-300',
-    iconBg: 'bg-purple-500',
-    handle: '!bg-purple-500',
+    border: 'border-gray-800',
+    selectedBorder: 'border-black',
+    iconBg: 'bg-gray-900',
+    handle: '!bg-gray-900',
   },
   green: {
-    border: 'border-green-500',
-    selectedBorder: 'border-green-300',
-    iconBg: 'bg-green-500',
-    handle: '!bg-green-500',
+    border: 'border-gray-600',
+    selectedBorder: 'border-black',
+    iconBg: 'bg-gray-600',
+    handle: '!bg-gray-600',
   },
   pink: {
-    border: 'border-pink-500',
-    selectedBorder: 'border-pink-300',
-    iconBg: 'bg-pink-500',
-    handle: '!bg-pink-500',
+    border: 'border-gray-700',
+    selectedBorder: 'border-black',
+    iconBg: 'bg-gray-700',
+    handle: '!bg-gray-700',
   },
   yellow: {
-    border: 'border-yellow-500',
-    selectedBorder: 'border-yellow-300',
-    iconBg: 'bg-yellow-500',
-    handle: '!bg-yellow-500',
+    border: 'border-gray-500',
+    selectedBorder: 'border-black',
+    iconBg: 'bg-gray-500',
+    handle: '!bg-gray-500',
   },
   slate: {
-    border: 'border-slate-500',
-    selectedBorder: 'border-slate-300',
-    iconBg: 'bg-slate-500',
-    handle: '!bg-slate-500',
+    border: 'border-gray-400',
+    selectedBorder: 'border-black',
+    iconBg: 'bg-gray-400',
+    handle: '!bg-gray-400',
   },
 } as const
 
@@ -61,27 +61,27 @@ function getStateClasses(data: WorkflowNodeData) {
     case 'building':
       return {
         frame: 'ring-2 ring-cyan-400/40 shadow-[0_0_40px_rgba(34,211,238,0.14)]',
-        badge: 'border border-cyan-400/30 bg-cyan-400/10 text-cyan-100',
+        badge: 'border border-cyan-400/30 bg-cyan-400/10 text-cyan-700',
       }
     case 'running':
       return {
         frame: 'ring-2 ring-sky-400/40 shadow-[0_0_36px_rgba(56,189,248,0.18)]',
-        badge: 'border border-sky-400/30 bg-sky-400/10 text-sky-100',
+        badge: 'border border-sky-400/30 bg-sky-400/10 text-sky-700',
       }
     case 'completed':
       return {
         frame: 'ring-2 ring-emerald-400/35 shadow-[0_0_32px_rgba(52,211,153,0.14)]',
-        badge: 'border border-emerald-400/30 bg-emerald-400/10 text-emerald-100',
+        badge: 'border border-emerald-400/30 bg-emerald-400/10 text-emerald-700',
       }
     case 'failed':
       return {
         frame: 'ring-2 ring-rose-400/35 shadow-[0_0_32px_rgba(251,113,133,0.14)]',
-        badge: 'border border-rose-400/30 bg-rose-400/10 text-rose-100',
+        badge: 'border border-rose-400/30 bg-rose-400/10 text-rose-700',
       }
     default:
       return {
         frame: '',
-        badge: 'border border-slate-700 bg-slate-900/90 text-slate-300',
+        badge: 'border border-gray-200 bg-white text-gray-600',
       }
   }
 }
@@ -111,7 +111,7 @@ export function NodeCard({
   return (
     <div
       className={[
-        'min-w-[170px] rounded-xl border-2 bg-slate-800/95 px-4 py-3 backdrop-blur transition-all duration-300',
+        'min-w-[170px] border-2 bg-white px-4 py-3 backdrop-blur transition-all duration-300',
         visible ? 'scale-100 opacity-100' : 'scale-95 opacity-0',
         selected ? accentStyle.selectedBorder : accentStyle.border,
         stateStyle.frame,
@@ -119,20 +119,20 @@ export function NodeCard({
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2">
-          <span className={`${accentStyle.iconBg} flex h-6 w-6 items-center justify-center rounded text-xs text-white`}>
+          <span className={`${accentStyle.iconBg} flex h-6 w-6 items-center justify-center text-xs text-white`}>
             {icon}
           </span>
           <div>
-            <div className="text-sm font-semibold text-slate-100">{title}</div>
+            <div className="text-sm font-semibold text-gray-900">{title}</div>
             {effectiveSubtitle && (
-              <div className="mt-1 max-w-[160px] text-[11px] text-slate-400">
+              <div className="mt-1 max-w-[160px] text-[11px] text-gray-500">
                 {effectiveSubtitle}
               </div>
             )}
           </div>
         </div>
         {data.visualLabel && data.visualLabel.trim() && (
-          <div className={`rounded-full px-2 py-1 text-[10px] uppercase tracking-[0.14em] ${stateStyle.badge}`}>
+          <div className={`px-2 py-1 text-[10px] uppercase tracking-[0.14em] ${stateStyle.badge}`}>
             {data.visualLabel}
           </div>
         )}

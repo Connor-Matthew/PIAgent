@@ -98,3 +98,33 @@ export interface SSEEvent {
   iteration_index?: number
   scope_id?: string
 }
+
+export type AssistantMessageRole = 'user' | 'assistant'
+
+export interface AssistantToolTrace {
+  callId: string
+  tool: string
+  args: Record<string, unknown>
+  summary?: string
+  isOpen?: boolean
+}
+
+export interface AssistantMessage {
+  id: string
+  role: AssistantMessageRole
+  content: string
+  toolTraces?: AssistantToolTrace[]
+}
+
+export type AssistantSSEEventName =
+  | 'session.started'
+  | 'message.delta'
+  | 'tool.call'
+  | 'tool.result'
+  | 'message.done'
+  | 'error'
+
+export interface AssistantSSEEvent {
+  event: AssistantSSEEventName
+  data: Record<string, unknown>
+}

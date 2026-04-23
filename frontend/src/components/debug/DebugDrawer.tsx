@@ -62,58 +62,58 @@ export function DebugDrawer() {
     : !isRunning && !!workflowId && !!inputText.trim()
 
   return (
-    <div className="border-t border-slate-700 bg-slate-900 shrink-0" style={{ height: '40vh' }}>
+    <div className="border-t border-gray-200 bg-white shrink-0" style={{ height: '40vh' }}>
       {/* Header */}
-      <div className="bg-slate-800 px-5 py-3 flex justify-between items-center border-b border-slate-700">
+      <div className="bg-gray-50 px-5 py-3 flex justify-between items-center border-b border-gray-200">
         <div className="flex items-center gap-3">
-          <span className="text-slate-100 text-sm font-semibold">调试运行</span>
+          <span className="text-gray-900 text-sm font-semibold">调试运行</span>
           <div className="flex gap-1">
             <button
               onClick={() => setMode('simple')}
-              className={`text-xs px-2.5 py-1 rounded ${mode === 'simple' ? 'bg-blue-500 text-white' : 'bg-slate-900 text-slate-400'}`}
+              className={`text-xs px-2.5 py-1 ${mode === 'simple' ? 'bg-black text-white' : 'bg-white text-gray-500 border border-gray-200'}`}
             >
               简洁
             </button>
             <button
               onClick={() => setMode('detailed')}
-              className={`text-xs px-2.5 py-1 rounded ${mode === 'detailed' ? 'bg-blue-500 text-white' : 'bg-slate-900 text-slate-400'}`}
+              className={`text-xs px-2.5 py-1 ${mode === 'detailed' ? 'bg-black text-white' : 'bg-white text-gray-500 border border-gray-200'}`}
             >
               详细
             </button>
           </div>
         </div>
-        <button onClick={toggleDrawer} className="text-slate-500 hover:text-slate-300 text-lg">✕</button>
+        <button onClick={toggleDrawer} className="text-gray-400 hover:text-gray-700 text-lg">✕</button>
       </div>
 
       {/* Body */}
       <div className="flex h-[calc(100%-48px)]">
         {/* Input Form */}
-        <div className="w-[300px] p-4 border-r border-slate-800 overflow-y-auto">
+        <div className="w-[300px] p-4 border-r border-gray-200 overflow-y-auto">
           {startInputs.length === 0 ? (
             <>
-              <div className="text-xs text-slate-400 mb-2">输入文本</div>
+              <div className="text-xs text-gray-500 mb-2">输入文本</div>
               <textarea
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
                 placeholder="请输入播客主题..."
-                className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-sm text-slate-200 resize-none h-24"
+                className="w-full bg-white border border-gray-200 p-3 text-sm text-gray-900 resize-none h-24 focus:border-black focus:outline-none"
               />
             </>
           ) : (
             <>
-              <div className="text-xs text-slate-400 mb-2">工作流输入</div>
+              <div className="text-xs text-gray-500 mb-2">工作流输入</div>
               <div className="space-y-3">
                 {startInputs.map((field) => (
                   <label key={field.name} className="block">
-                    <span className="text-xs text-slate-300 block mb-1">
+                    <span className="text-xs text-gray-700 block mb-1">
                       {field.name}
-                      {field.required && <span className="text-red-400 ml-1">*</span>}
+                      {field.required && <span className="text-red-600 ml-1">*</span>}
                     </span>
                     {field.type === 'select' ? (
                       <select
                         value={(runInputs[field.name] as string) || (field.default as string) || ''}
                         onChange={(e) => setRunInput(field.name, e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200"
+                        className="w-full bg-white border border-gray-200 px-3 py-2 text-sm text-gray-900 focus:border-black focus:outline-none"
                       >
                         <option value="">请选择</option>
                         {(field.options || []).map((opt) => (
@@ -125,27 +125,27 @@ export function DebugDrawer() {
                         type="number"
                         value={(runInputs[field.name] as number | string) ?? (field.default ?? '')}
                         onChange={(e) => setRunInput(field.name, e.target.value === '' ? '' : Number(e.target.value))}
-                        className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200"
+                        className="w-full bg-white border border-gray-200 px-3 py-2 text-sm text-gray-900 focus:border-black focus:outline-none"
                       />
                     ) : (
                       <input
                         type={field.type === 'file' ? 'file' : 'text'}
                         value={field.type === 'file' ? undefined : ((runInputs[field.name] as string) ?? (field.default as string) ?? '')}
                         onChange={(e) => setRunInput(field.name, e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200"
+                        className="w-full bg-white border border-gray-200 px-3 py-2 text-sm text-gray-900 focus:border-black focus:outline-none"
                       />
                     )}
                   </label>
                 ))}
               </div>
               {/* Fallback plain input if user still wants free text */}
-              <div className="mt-4 pt-3 border-t border-slate-800">
-                <div className="text-xs text-slate-500 mb-1">附加输入（可选）</div>
+              <div className="mt-4 pt-3 border-t border-gray-200">
+                <div className="text-xs text-gray-400 mb-1">附加输入（可选）</div>
                 <textarea
                   value={inputText}
                   onChange={(e) => setInputText(e.target.value)}
                   placeholder="额外补充文本..."
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-sm text-slate-200 resize-none h-16"
+                  className="w-full bg-white border border-gray-200 p-2 text-sm text-gray-900 resize-none h-16 focus:border-black focus:outline-none"
                 />
               </div>
             </>
@@ -153,7 +153,7 @@ export function DebugDrawer() {
           <button
             onClick={handleRun}
             disabled={!canRun}
-            className="w-full mt-3 bg-blue-500 text-white rounded-lg py-2 text-sm hover:bg-blue-600 disabled:opacity-50"
+            className="w-full mt-3 bg-red-600 text-white py-2 text-sm hover:bg-red-700 disabled:opacity-50"
           >
             {isRunning ? '运行中...' : '▶ 开始运行'}
           </button>
@@ -163,22 +163,22 @@ export function DebugDrawer() {
         {mode === 'detailed' && <ExecutionTimeline />}
 
         {/* Final Output */}
-        <div className="w-[320px] p-4 border-l border-slate-800 overflow-y-auto">
-          <div className="text-xs text-slate-400 mb-3">最终输出</div>
+        <div className="w-[320px] p-4 border-l border-gray-200 overflow-y-auto">
+          <div className="text-xs text-gray-500 mb-3">最终输出</div>
 
           {finalAnswer !== null && (
-            <div className="bg-slate-950 border border-slate-700 rounded-lg p-3 mb-3">
-              <div className="text-xs text-slate-500 mb-1">回答内容</div>
-              <div className="text-sm text-slate-200 whitespace-pre-wrap">{finalAnswer}</div>
+            <div className="bg-white border border-gray-200 p-3 mb-3">
+              <div className="text-xs text-gray-400 mb-1">回答内容</div>
+              <div className="text-sm text-gray-900 whitespace-pre-wrap">{finalAnswer}</div>
             </div>
           )}
 
           {finalOutputs !== null && (
-            <details className="bg-slate-950 border border-slate-700 rounded-lg mb-3 group" open={Object.keys(finalOutputs).length > 0}>
-              <summary className="px-3 py-2 text-xs text-slate-400 cursor-pointer select-none hover:text-slate-300">
+            <details className="bg-white border border-gray-200 mb-3 group" open={Object.keys(finalOutputs).length > 0}>
+              <summary className="px-3 py-2 text-xs text-gray-500 cursor-pointer select-none hover:text-gray-700">
                 结构化输出 (JSON)
               </summary>
-              <pre className="px-3 pb-3 text-xs text-slate-300 overflow-x-auto">
+              <pre className="px-3 pb-3 text-xs text-gray-700 overflow-x-auto">
                 {JSON.stringify(finalOutputs, null, 2)}
               </pre>
             </details>
@@ -187,7 +187,7 @@ export function DebugDrawer() {
           <AudioPlayer />
 
           {finalAnswer === null && finalOutputs === null && !isRunning && (
-            <div className="text-sm text-slate-600 text-center mt-8">等待工作流执行完成...</div>
+            <div className="text-sm text-gray-400 text-center mt-8">等待工作流执行完成...</div>
           )}
         </div>
       </div>

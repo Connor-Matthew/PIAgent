@@ -6,12 +6,12 @@ export function ExecutionTimeline() {
 
   return (
     <div className="flex-1 p-4 overflow-y-auto">
-      <div className="text-xs text-slate-400 mb-3">执行链路</div>
+      <div className="text-xs text-gray-500 mb-3">执行链路</div>
       {Array.from(nodeStates.values()).map((state) => (
         <NodeStatusCard key={state.nodeId} state={state} />
       ))}
       {nodeStates.size === 0 && (
-        <div className="text-sm text-slate-600 text-center mt-8">等待运行...</div>
+        <div className="text-sm text-gray-400 text-center mt-8">等待运行...</div>
       )}
     </div>
   )

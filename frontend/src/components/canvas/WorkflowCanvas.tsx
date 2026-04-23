@@ -6,14 +6,18 @@ import { useDebugStore } from '../../stores/debugStore'
 import { nodeTypes } from '../nodes'
 import { useDnD } from '../../hooks/useDnD'
 import { CanvasToolbar } from './CanvasToolbar'
+import { ChatPanel } from '../assistant/ChatPanel'
+import { useAssistantStore } from '../../stores/assistantStore'
 
 const DEFAULT_EDGE_OPTIONS = {
-  markerEnd: { type: MarkerType.ArrowClosed, color: '#64748b' },
+  markerEnd: { type: MarkerType.ArrowClosed, color: '#9ca3af' },
 }
 
 export function WorkflowCanvas() {
   const { fitView } = useReactFlow()
-  const { nodes, edges, onNodesChange, onEdgesChange, onConnect, setSelectedNode, deleteEdge } = useWorkflowStore()
+  const { nodes, edges, workflowId, onNodesChange, onEdgesChange, onConnect, setSelectedNode, deleteEdge, deleteNode } = useWorkflowStore()
+  const toggleAssistant = useAssistantStore((s) => s.togglePanel)
+  const assistantOpen = useAssistantStore((s) => s.isOpen)
   const isExecuting = useDebugStore((s) => s.isRunning)
   const nodeStates = useDebugStore((s) => s.nodeStates)
   const getAggregatedNodeStatus = useDebugStore((s) => s.getAggregatedNodeStatus)
@@ -59,7 +63,7 @@ export function WorkflowCanvas() {
     return edges.map((edge) => {
       const sourceStatus = nodeStates.get(edge.source)?.status
       const targetStatus = nodeStates.get(edge.target)?.status
-      let stroke = '#475569'
+      let stroke = '#9ca3af'
       let strokeWidth = 1.8
       let animated = Boolean(edge.animated)
       let strokeDasharray: string | undefined
@@ -113,18 +117,33 @@ export function WorkflowCanvas() {
         onDragOver={onDragOver}
         onDrop={onDrop}
         onNodeClick={(_, node) => setSelectedNode(node.id)}
+        onNodeContextMenu={(event, node) => {
+          event.preventDefault()
+          deleteNode(node.id)
+          if (setSelectedNode && node.id) setSelectedNode(null)
+        }}
         onPaneClick={() => setSelectedNode(null)}
         onEdgeDoubleClick={(_, edge) => deleteEdge(edge.id)}
         nodeTypes={nodeTypes}
         defaultEdgeOptions={DEFAULT_EDGE_OPTIONS}
         fitView
-        className="bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.08),_transparent_28%),radial-gradient(circle_at_bottom_right,_rgba(56,189,248,0.06),_transparent_30%),#0a0f1a]"
+        className="bg-[#F5F5F5]"
       >
-        <Background color="#1e293b" gap={24} size={1} />
-        <Controls className="!bg-slate-800 !border-slate-700" />
-        <MiniMap className="!bg-slate-900" nodeColor="#334155" />
+        <Background color="#d4d4d4" gap={24} size={1} />
+        <Controls className="!bg-white !border-black" />
+        <MiniMap className="!bg-white" nodeColor="#737373" />
       </ReactFlow>
       <CanvasToolbar />
+      <button
+        type="button"
+        onClick={toggleAssistant}
+        disabled={!workflowId}
+        title="工作流助手"
+        className="absolute bottom-4 right-4 z-20 flex h-11 w-11 items-center justify-center border border-black bg-white text-sm font-semibold text-black hover:bg-gray-50 disabled:cursor-not-allowed disabled:text-gray-300"
+      >
+        AI
+      </button>
+      {assistantOpen && <ChatPanel workflowId={workflowId} />}
     </div>
   )
 }

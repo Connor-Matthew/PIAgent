@@ -42,6 +42,7 @@ interface WorkflowState {
   patchNodeConfig: (id: string, patch: Record<string, unknown>) => void
   setWorkflow: (id: string, name: string, nodes: WorkflowNodeInput[], edges: WorkflowEdgeInput[]) => void
   deleteEdge: (edgeId: string) => void
+  deleteNode: (nodeId: string) => void
   toGraphJSON: () => WorkflowGraph
 }
 
@@ -234,6 +235,12 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 
   deleteEdge: (edgeId: string) =>
     set({ edges: get().edges.filter((e) => e.id !== edgeId) }),
+
+  deleteNode: (nodeId: string) => {
+    const node = get().nodes.find((n) => n.id === nodeId)
+    if (!node || node.data.locked) return
+    get().onNodesChange([{ type: 'remove', id: nodeId }])
+  },
 
   addNode: (node) =>
     set((state) => {
