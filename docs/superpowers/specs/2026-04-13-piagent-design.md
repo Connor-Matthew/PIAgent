@@ -4,8 +4,8 @@
 > - 2026-04-14：默认 Input / Output 节点 + 变量契约阶段已实施完成。后端已新增 `template.py`、扩展 `WorkflowState`、完成 `CompilerError` IO 校验、`/run` 接口支持 `inputs` dict，全部 64 项测试通过。
 > - 2026-04-14：Provider 实例化管理阶段已实施完成。后端新增 `providers` 表、`core/crypto.py`、Provider CRUD API、模型列表缓存、`openai_compatible` 协议支持，`compiler.py` 增加 provider_id 校验，全部 82 项测试通过。
 > - 2026-04-15：MiniMax TTS 专用节点接入阶段已实施完成。Provider 表新增 `category` 字段（`llm`/`tts`）、新增 `MiniMaxTTSProvider`、`TTSNode` 复用 Provider 系统、前端 Provider 管理页和 TTS 配置面板均支持 category 切换，全部 91 项测试通过。
-> - 2026-04-15（计划）：节点级流式执行阶段。LLM/Agent 节点接入 token 级 `node_stream` 推送，长耗时节点（TTS）增加 `node_heartbeat` 心跳事件，前端 NodeStatusCard 实现打字机渲染与计时器。详见 `plans/2026-04-15-streaming-execution.md`。
-> - 2026-04-15（计划）：TTS 长文本分片并行合成阶段。新增句子级分片器，`asyncio.gather + Semaphore` 并发合成，按序拼接 mp3，进度复用 `node_stream` 事件契约（`delta.phase = "tts_chunk"`）。详见 `plans/2026-04-15-tts-chunking.md`。
+> - 2026-04-15（历史计划）：节点级流式执行阶段。LLM/Agent 节点接入 token 级 `node_stream` 推送，长耗时节点（TTS）增加 `node_heartbeat` 心跳事件，前端 NodeStatusCard 实现打字机渲染与计时器。详见 `../plans/archive/2026-04-15-streaming-execution.md`。
+> - 2026-04-15（历史计划）：TTS 长文本分片并行合成阶段。新增句子级分片器，`asyncio.gather + Semaphore` 并发合成，按序拼接 mp3，进度复用 `node_stream` 事件契约（`delta.phase = "tts_chunk"`）。详见 `../plans/archive/2026-04-15-tts-chunking.md`。
 
 ## 项目定位
 

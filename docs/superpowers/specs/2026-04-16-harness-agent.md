@@ -6,7 +6,7 @@
 > 关系：
 > - 当前已落地的 Harness 骨架详见 `2026-04-16-agent-harness.md`
 > - 当前已落地的 Agent Mode 详见 `2026-04-15-agent-mode.md`
-> - 当前 Runtime Tool Use 的已有计划详见 `../plans/2026-04-16-agent-tool-use.md`
+> - 当前 Runtime Tool Use 的历史计划已归档，详见 `../plans/archive/2026-04-16-agent-tool-use.md`
 > - 本文档不重复记录已完成内容，而是定义下一阶段的目标态和实施标准
 
 ---

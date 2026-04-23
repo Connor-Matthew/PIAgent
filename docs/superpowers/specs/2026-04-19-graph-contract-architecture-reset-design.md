@@ -2,7 +2,7 @@
 
 > **创建日期：** 2026-04-19  
 > **状态：** 已转为执行计划  
-> **执行计划：** `docs/superpowers/plans/2026-04-19-graph-contract-runtime-context-refactor.md`  
+> **执行计划：** 已归档至 `docs/superpowers/plans/archive/2026-04-19-graph-contract-runtime-context-refactor.md`
 > **背景：** 基于当前 Harness v2 与控制流/子图实现 review 后的架构整理建议。  
 > **目标：** 在继续扩展 if-else、iteration、Harness 自动建图之前，先把 graph 契约和模块边界收紧，避免前端、后端、Harness 对同一张图产生不同理解。
 
@@ -704,4 +704,3 @@ WorkflowGraphV2 → ReactFlow nodes/edges → WorkflowGraphV2
 4. 再继续做控制流 UI、scope debug 和 Harness 自动化。
 
 这不是一次大重写，而是一次必要的地基收紧。
-

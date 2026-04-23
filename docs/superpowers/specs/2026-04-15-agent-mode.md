@@ -626,7 +626,7 @@ start_1 -> rag_1 -> llm_1 -> tts_1 -> end_1
 
 Phase 2 spike 结论已单独整理在：
 
-- [`docs/superpowers/plans/2026-04-15-agent-mode-phase2-spike.md`](../plans/2026-04-15-agent-mode-phase2-spike.md)
+- [`docs/superpowers/plans/archive/2026-04-15-agent-mode-phase2-spike.md`](../plans/archive/2026-04-15-agent-mode-phase2-spike.md)
 
 ---
 

@@ -5,7 +5,7 @@
 > 目标：让 PIAgent 从 “自然语言生成 workflow 草案” 进一步演进到 “可视化 super agent harness + workflow runtime”。
 > 关系：
 > - 当前已落地的 Agent Mode 仍然有效，详见 `2026-04-15-agent-mode.md`
-> - 当前已落地的可视化 build-and-run 路线仍然有效，详见 `../plans/2026-04-16-agent-tool-use.md`
+> - 当前已落地的可视化 build-and-run 路线历史计划已归档，详见 `../plans/archive/2026-04-16-agent-tool-use.md`
 > - 本文档不是对 DeerFlow 的直接移植，而是对其 harness 思想在 PIAgent 场景下的本地化设计
 
 ## 0. 执行记录（2026-04-16）

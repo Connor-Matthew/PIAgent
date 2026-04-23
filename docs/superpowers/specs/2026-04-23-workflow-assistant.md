@@ -3,6 +3,7 @@
 **Date**: 2026-04-23
 **Status**: Design approved, not yet implemented
 **Supersedes**: the ReAct graph-builder harness (to be removed on branch `codex/remove-harness`)
+**Planning note**: Previous execution plans have been archived under `docs/superpowers/plans/archive/`; this spec is the active source of truth.
 
 ## Context
 
